@@ -54,6 +54,60 @@ def get_tts_model():
     return _tts_model_instance
 
 
+def ensure_compatible_audio(file_path):
+    """
+    Ensure the audio file is compatible with Pocket TTS (24kHz WAV).
+    If not, convert it using ffmpeg.
+    """
+    path = Path(file_path)
+    if not path.exists():
+        return None
+
+    # Check extension and potentially format
+    # Simple check: if it's already a wav, we might assume it's okay,
+    # but Pocket TTS strictly prefers 24kHz.
+    # To be safe, we can always convert/resample if it's not known 24k wav.
+    # For now, let's just convert everything that isn't a likely-correct wav.
+
+    # Heuristic: If filename ends in _24k.wav, assume it's good (our own convention)
+    if path.name.endswith("_24k.wav"):
+        return str(path)
+
+    # Use a temp file for conversion
+    compatible_path = path.parent / f"{path.stem}_24k.wav"
+
+    # If the compatible file already exists, use it to save time
+    if compatible_path.exists():
+        return str(compatible_path)
+
+    print(f"Converting {path.name} to 24kHz WAV...")
+    ffmpeg = get_ffmpeg_path()
+    if not ffmpeg:
+        print("Warning: ffmpeg not found, using original file (may fail).")
+        return str(path)
+
+    try:
+        subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-i",
+                str(path),
+                "-ar",
+                "24000",
+                "-ac",
+                "1",  # Force mono for consistency, or keep stereo? Pocket TTS docs say "mono or stereo"
+                str(compatible_path),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return str(compatible_path)
+    except subprocess.CalledProcessError as e:
+        print(f"Conversion failed: {e}")
+        return str(path)  # Fallback to original
+
+
 class PocketTTSPipeline:
     """TTS Pipeline using Pocket TTS for voice cloning."""
 
@@ -62,7 +116,7 @@ class PocketTTSPipeline:
     PARAGRAPH_PAUSE_DURATION = 0.9  # 900ms pause between paragraphs
 
     def __init__(self, ref_audio=None, voice_preset=None):
-        self.ref_audio = ref_audio
+        self.ref_audio = ensure_compatible_audio(ref_audio) if ref_audio else None
         self.voice_preset = voice_preset
         self._nlp = None
         # Pre-load model
