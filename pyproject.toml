@@ -1,0 +1,35 @@
+[project]
+name = "clonepub"
+version = "0.1.0"
+description = "Convert EPUB e-books to audiobooks with voice cloning - Apple Silicon optimized"
+authors = [
+    { name = "Your Name", email = "your.email@example.com" }
+]
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "ebooklib>=0.18",
+    "soundfile>=0.13.1",
+    "bs4>=0.0.2",
+    "spacy>=3.8.3",
+    "pocket-tts",
+    "pywebview>=5.0",
+    "lxml>=5.0.0",
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    "flask>=3.1.2",
+    "flask-cors>=6.0.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project.scripts]
+clonepub = "clonepub.main:main"
+
+[project.urls]
+Homepage = "https://github.com/jarodise/ClonEpub"
+Repository = "https://github.com/jarodise/ClonEpub"

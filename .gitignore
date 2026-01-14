@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Build
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Bundled binaries (copied during build)
+clonepub/bin/
+
+# Audio files (generated)
+*.wav
+*.mp3
+*.m4b
+*.m4a
+
+# Test outputs
+testing_output/
+docs/DISTRIBUTION_PLAN.md
+docs/IMPLEMENTATION_PLAN.md
+docs/IMPLEMENTATION_PLAN.md
+docs/IMPLEMENTATION_PLAN.md

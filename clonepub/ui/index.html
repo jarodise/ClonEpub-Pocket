@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClonEpub</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- ffmpeg Warning Banner -->
+    <div class="warning-banner hidden" id="ffmpegWarning">
+        <span class="warning-icon">⚠️</span>
+        <span class="warning-text">
+            <strong>ffmpeg not found.</strong> Install with: <code>brew install ffmpeg</code>
+        </span>
+        <button class="warning-dismiss" id="dismissFfmpegWarning">✕</button>
+    </div>
+
+    <!-- Setup Modal (First Launch) -->
+    <div class="modal-overlay hidden" id="setupModal">
+        <div class="modal setup-modal">
+            <div class="modal-header">
+                <span class="modal-icon">🎧</span>
+                <h2>Setting up ClonEpub</h2>
+            </div>
+            <div class="modal-body">
+                <p class="setup-intro">This app requires ML models to generate audio. The following will be downloaded:
+                </p>
+
+                <div class="model-list" id="modelList">
+                    <!-- Populated by JS -->
+                </div>
+
+                <p class="setup-note">
+                    <span class="note-icon">💾</span>
+                    Models are stored in <code>~/.cache/huggingface/</code>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary btn-large" id="startDownloadBtn">
+                    <span class="btn-icon">⬇️</span> Download Now
+                </button>
+            </div>
+
+            <!-- Download Progress (replaces button when downloading) -->
+            <div class="download-progress hidden" id="downloadProgress">
+                <p class="download-status" id="downloadStatus">Downloading...</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="downloadProgressFill"></div>
+                </div>
+                <p class="download-current" id="downloadCurrent">Preparing...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1 class="app-title">ClonEpub</h1>
+            <button class="btn btn-primary" id="openEpubBtn">
+                <span class="btn-icon">📂</span> Open EPUB
+            </button>
+            <div class="model-status" id="modelStatus">
+                <span class="status-dot"></span>
+                <span class="status-text">Checking models...</span>
+            </div>
+        </header>
+
+        <!-- Welcome View (shown when no book loaded) -->
+        <section id="welcomeView" class="view active">
+            <div class="welcome-container">
+                <div class="welcome-hero">
+                    <span class="welcome-icon">🎧</span>
+                    <h2>Welcome to ClonEpub</h2>
+                    <p>Convert EPUB e-books to audiobooks with voice cloning</p>
+                </div>
+
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-zone-content">
+                        <span class="drop-icon">📖</span>
+                        <h3>Drop EPUB here</h3>
+                        <p>or click "Open EPUB" above</p>
+                    </div>
+                </div>
+
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <span class="feature-icon">🎤</span>
+                        <h4>Voice Cloning</h4>
+                        <p>Clone any voice from a short audio sample</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">⚡</span>
+                        <h4>Apple Silicon</h4>
+                        <p>Optimized for M1/M2/M3/M4 Macs</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">📚</span>
+                        <h4>EPUB Support</h4>
+                        <p>Works with standard EPUB files</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Book View (three-column layout matching mockup) -->
+        <section id="bookView" class="view">
+            <div class="book-layout">
+                <!-- Left Column: Chapter List -->
+                <div class="chapter-panel">
+                    <div class="panel-header">
+                        <h3>CHAPTER LIST</h3>
+                        <span class="chapter-count" id="chapterCount">(0)</span>
+                    </div>
+                    <div class="chapters-list" id="chaptersList">
+                        <!-- Chapters populated by JS -->
+                    </div>
+                    <div class="panel-footer">
+                        <button class="btn btn-sm" id="selectAllBtn">Select All</button>
+                        <button class="btn btn-sm" id="deselectAllBtn">Deselect</button>
+                    </div>
+                </div>
+
+                <!-- Center Column: Book Info + Chapter Preview -->
+                <div class="center-panel">
+                    <!-- Book Info -->
+                    <div class="book-info">
+                        <div class="book-cover-container">
+                            <img id="bookCover" src="" alt="Book Cover" class="book-cover hidden">
+                            <div class="book-cover-placeholder" id="coverPlaceholder">📚</div>
+                        </div>
+                        <div class="book-meta">
+                            <h2 id="bookTitle">Book Title</h2>
+                            <p id="bookAuthor" class="book-author">Author Name</p>
+                            <p id="bookStats" class="book-stats">Total Length: -- | 0 chars</p>
+                        </div>
+                    </div>
+
+                    <!-- Chapter Preview -->
+                    <div class="chapter-preview">
+                        <div class="preview-header">
+                            <h3>CHAPTER PREVIEW</h3>
+                            <span class="preview-chapter-name" id="previewChapterName">Click a chapter to preview</span>
+                        </div>
+                        <textarea id="chapterPreviewText" class="preview-text"
+                            placeholder="Click on a chapter name in the list to preview its content..."></textarea>
+                    </div>
+                </div>
+
+                <!-- Right Column: Generation Settings -->
+                <div class="settings-panel">
+                    <h3>GENERATION SETTINGS</h3>
+
+                    <div class="setting-group">
+                    <label>TTS Model</label>
+                    <div class="select-wrapper">
+                        <select id="model-select">
+                            <option value="pocket-tts">Pocket TTS</option>
+                        </select>
+                    </div>
+                </div>     <div class="form-group">
+                        <label>Voice Reference</label>
+                        <div class="file-input-group">
+                            <button class="btn btn-secondary btn-sm" id="chooseRefAudioBtn">Choose File...</button>
+                            <span class="file-name" id="refAudioFileName">No file selected</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Reference Text <span class="optional">(optional)</span></label>
+                        <textarea id="refText" class="form-textarea" rows="2"
+                            placeholder="Transcript of reference audio for better accuracy..."></textarea>
+                    </div>
+
+                    <button class="btn btn-accent btn-full" id="previewVoiceBtn" disabled>
+                        <span class="btn-icon">🔊</span> Preview Cloned Voice
+                    </button>
+
+                    <div class="form-group">
+                        <label>Speed</label>
+                        <div class="speed-control">
+                            <span class="speed-label">0.5x</span>
+                            <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0">
+                            <span class="speed-label">2x</span>
+                        </div>
+                        <div class="speed-value" id="speedValue">1.0x</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Output Folder</label>
+                        <button class="btn btn-secondary btn-sm btn-full" id="chooseOutputBtn">Choose Folder...</button>
+                        <p class="output-path" id="outputPath">/Users/Username/Music/Audiblez/...</p>
+                    </div>
+
+                    <div class="generation-section">
+                        <button class="btn btn-primary btn-large" id="startGenerationBtn">
+                            <span class="btn-icon">▶</span> Start Generation
+                        </button>
+
+                        <div class="progress-container" id="progressContainer" style="display: none;">
+                            <p class="progress-label" id="progressLabel">Generating Chapter 1 (15%)...</p>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                            <p class="time-remaining" id="timeRemaining">Time Remaining: ~2h 30m</p>
+                            <button class="btn btn-danger btn-sm" id="stopGenerationBtn">Stop</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
