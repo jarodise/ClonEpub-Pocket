@@ -218,12 +218,15 @@ class ClonEpubAPI:
         return None
 
     def preview_voice(
-        self, text: str, ref_audio: Optional[str] = None, ref_text: Optional[str] = None
+        self,
+        text: str,
+        ref_audio: Optional[str] = None,
+        voice_preset: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Generate a voice preview."""
         try:
-            pipeline = PocketTTSPipeline(ref_audio=ref_audio, ref_text=ref_text)
-            audio = pipeline.generate(text[:500], speed=1.0)  # Limit preview length
+            pipeline = PocketTTSPipeline(ref_audio=ref_audio, voice_preset=voice_preset)
+            audio = pipeline.generate(text[:500])  # Limit preview length
 
             if audio is not None:
                 import io
@@ -271,8 +274,7 @@ class ClonEpubAPI:
         self,
         output_folder: str,
         ref_audio: Optional[str] = None,
-        ref_text: Optional[str] = None,
-        speed: float = 1.0,
+        voice_preset: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Start audiobook synthesis in background thread."""
         if self._synthesis_thread and self._synthesis_thread.is_alive():
@@ -329,8 +331,7 @@ class ClonEpubAPI:
                     chapters=selected_chapters,
                     output_folder=str(book_output_dir),
                     ref_audio=ref_audio,
-                    ref_text=ref_text,
-                    speed=speed,
+                    voice_preset=voice_preset,
                     progress_callback=progress_callback,
                     book_title=book_title,
                     book_author=book_author,

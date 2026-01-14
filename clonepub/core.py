@@ -61,9 +61,9 @@ class PocketTTSPipeline:
     SENTENCE_PAUSE_DURATION = 0.5  # 500ms pause between sentences
     PARAGRAPH_PAUSE_DURATION = 0.9  # 900ms pause between paragraphs
 
-    def __init__(self, ref_audio=None, ref_text=None):
+    def __init__(self, ref_audio=None, voice_preset=None):
         self.ref_audio = ref_audio
-        self.ref_text = ref_text
+        self.voice_preset = voice_preset
         self._nlp = None
         # Pre-load model
         self.model = get_tts_model()
@@ -101,49 +101,44 @@ class PocketTTSPipeline:
                 self._nlp = spacy.load("en_core_web_sm")
         return self._nlp
 
-    def _generate_single_audio(self, text, speed):
+    def _generate_single_audio(self, text):
         """Generate audio for a single text segment using Pocket TTS."""
         cleaned_text = self._clean_text_for_tts(text)
 
         print(
-            f"DEBUG: Processing Audio - ref_audio present? {bool(self.ref_audio)}, ref_text_length={len(self.ref_text) if self.ref_text else 0}"
+            f"DEBUG: Processing Audio - ref_audio present? {bool(self.ref_audio)}, voice_preset={self.voice_preset}"
         )
 
         try:
             # Prepare audio prompt
             if self.ref_audio:
-                # Use provided reference audio
+                # Use provided reference audio (Custom voice cloning)
                 model_state = self.model.get_state_for_audio_prompt(self.ref_audio)
-            else:
-                # Use default voice if no reference provided
-                # "cosette" is a common default in pocket-tts, but we'll try to use a safe fallback
-                # If we can't find a predefined voice, we might just init empty state?
-                # Actually, get_state_for_audio_prompt supports string names for predefined voices
-                # Let's default to "marius" (male) or "cosette" (female).
-                default_voice = "marius"
+            elif self.voice_preset:
+                # Use selected preset
+                # Map 'custom' to fallback if it slipped through, though it shouldn't
+                voice = self.voice_preset if self.voice_preset != "custom" else "marius"
                 try:
-                    model_state = self.model.get_state_for_audio_prompt(default_voice)
-                except Exception:
-                    # Fallback if specific voice not found, init empty state
-                    from pocket_tts.modules.stateful_module import init_states
-
-                    model_state = init_states(
-                        self.model.flow_lm, batch_size=1, sequence_length=1000
+                    model_state = self.model.get_state_for_audio_prompt(voice)
+                except Exception as e:
+                    print(
+                        f"Warning: Preset '{voice}' failed ({e}). Falling back to 'marius'."
                     )
+                    model_state = self.model.get_state_for_audio_prompt("marius")
+            else:
+                # Default fallback
+                model_state = self.model.get_state_for_audio_prompt("marius")
 
             audio = self.model.generate_audio(
                 model_state=model_state,
                 text_to_generate=cleaned_text,
             )
 
-            # Convert to numpy if needed (assuming user hint "Convert output generic Tensor to numpy array")
+            # Convert to numpy if needed
             if hasattr(audio, "numpy"):
                 audio = audio.numpy()
             elif hasattr(audio, "detach"):  # Torch tensor
                 audio = audio.detach().cpu().numpy()
-
-            # Pocket TTS likely returns (audio_array) or similar.
-            # Assuming single channel audio array.
 
             return audio
 
@@ -159,14 +154,14 @@ class PocketTTSPipeline:
         between = text[sent_end:next_sent_start]
         return "\n\n" in between or "\n \n" in between
 
-    def generate(self, text, speed=1.0, progress_callback=None):
+    def generate(self, text, progress_callback=None):
         """Generate audio from text, yielding progress updates."""
         nlp = self._get_nlp()
         doc = nlp(text)
         sentences = list(doc.sents)
 
         if not sentences:
-            return self._generate_single_audio(text, speed)
+            return self._generate_single_audio(text)
 
         # Generate silence for pauses
         sentence_silence = np.zeros(
@@ -184,7 +179,7 @@ class PocketTTSPipeline:
             if not sentence_text:
                 continue
 
-            audio = self._generate_single_audio(sentence_text, speed)
+            audio = self._generate_single_audio(sentence_text)
             if audio is not None:
                 audio_segments.append(audio)
 
@@ -580,8 +575,7 @@ def generate_audiobook(
     chapters,
     output_folder,
     ref_audio=None,
-    ref_text=None,
-    speed=1.0,
+    voice_preset=None,
     progress_callback=None,
     book_title="Audiobook",
     book_author="Unknown",
@@ -606,7 +600,7 @@ def generate_audiobook(
     output_path = Path(output_folder)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    pipeline = PocketTTSPipeline(ref_audio=ref_audio, ref_text=ref_text)
+    pipeline = PocketTTSPipeline(ref_audio=ref_audio, voice_preset=voice_preset)
 
     total_chapters = len(chapters)
     mp3_files = []
@@ -651,9 +645,7 @@ def generate_audiobook(
             mp3_files.append(mp3_path)
             continue
 
-        audio = pipeline.generate(
-            text, speed=speed, progress_callback=chapter_progress_callback
-        )
+        audio = pipeline.generate(text, progress_callback=chapter_progress_callback)
 
         if audio is not None:
             # Write temp WAV then convert to MP3

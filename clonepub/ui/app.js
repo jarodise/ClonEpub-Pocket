@@ -109,8 +109,8 @@ const API_ENDPOINTS = {
     'get_chapter_content': { method: 'GET', path: (args) => `/api/chapter/${args[0]}` },
     'update_chapter_content': { method: 'POST', path: (args) => `/api/chapter/${args[0]}/update`, mapArgs: (args) => ({ text: args[1] }) },
     'toggle_chapter_selection': { method: 'POST', path: (args) => `/api/chapter/${args[0]}/toggle` },
-    'preview_voice': { method: 'POST', path: '/api/preview_voice', mapArgs: (args) => ({ text: args[0], ref_audio: args[1], ref_text: args[2] }) },
-    'start_synthesis': { method: 'POST', path: '/api/start_synthesis', mapArgs: (args) => ({ output_folder: args[0], ref_audio: args[1], ref_text: args[2], speed: args[3] }) },
+    'preview_voice': { method: 'POST', path: '/api/preview_voice', mapArgs: (args) => ({ text: args[0], ref_audio: args[1], voice_preset: args[2] }) },
+    'start_synthesis': { method: 'POST', path: '/api/start_synthesis', mapArgs: (args) => ({ output_folder: args[0], ref_audio: args[1], voice_preset: args[2] }) },
     'stop_synthesis': { method: 'POST', path: '/api/stop_synthesis' },
 };
 
@@ -336,8 +336,10 @@ async function saveChapterPreview() {
 const DEFAULT_PREVIEW_TEXT = "Hello! This is a preview of the cloned voice. The quick brown fox jumps over the lazy dog.";
 
 async function previewVoice() {
-    if (!state.refAudioPath) {
-        alert('Please select a reference audio file first');
+    const preset = elements.modelSelect.value;
+
+    if (preset === 'custom' && !state.refAudioPath) {
+        alert('Please select a reference audio file for custom voice cloning');
         return;
     }
 
@@ -345,7 +347,19 @@ async function previewVoice() {
     elements.previewVoiceBtn.innerHTML = '<span class="btn-icon">⏳</span> Generating...';
 
     try {
-        const result = await callAPI('preview_voice', DEFAULT_PREVIEW_TEXT, state.refAudioPath, state.refText);
+        // Prepare args based on selection
+        // Args: text, ref_audio, voice_preset
+        // If preset is selected, ref_audio is null
+        // If custom is selected, voice_preset is null (or 'custom' handled by backend?)
+        // Let's pass 'custom' as preset if custom, but also pass ref_audio
+        // Actually, backend needs to listen to voice_preset.
+
+        const result = await callAPI(
+            'preview_voice',
+            DEFAULT_PREVIEW_TEXT,
+            preset === 'custom' ? state.refAudioPath : null,
+            preset === 'custom' ? null : preset // If custom, preset is None so backend uses ref_audio
+        );
 
         if (result && result.success) {
             const audio = new Audio(`data:audio/wav;base64,${result.audio_base64}`);
@@ -355,7 +369,7 @@ async function previewVoice() {
         }
     } finally {
         elements.previewVoiceBtn.disabled = false;
-        elements.previewVoiceBtn.innerHTML = '<span class="btn-icon">🔊</span> Preview Cloned Voice';
+        elements.previewVoiceBtn.innerHTML = '<span class="btn-icon">🔊</span> Preview Voice';
     }
 }
 
@@ -420,14 +434,18 @@ async function startGeneration() {
         return;
     }
 
-    state.refText = elements.refText.value;
+    const preset = elements.modelSelect.value;
+
+    if (preset === 'custom' && !state.refAudioPath) {
+        alert('Please select a reference audio file for custom voice cloning');
+        return;
+    }
 
     const result = await callAPI(
         'start_synthesis',
         state.outputPath,
-        state.refAudioPath,
-        state.refText,
-        state.speed
+        preset === 'custom' ? state.refAudioPath : null,
+        preset === 'custom' ? null : preset
     );
 
     if (result && result.success) {
@@ -628,13 +646,35 @@ function setupEventListeners() {
     // Chapter preview - saved on blur
     elements.chapterPreviewText.addEventListener('blur', saveChapterPreview);
 
-    // Settings
+    // Voice selection
+    elements.modelSelect.addEventListener('change', (e) => {
+        const isCustom = e.target.value === 'custom';
+        const refGroup = document.getElementById('voiceRefGroup');
+
+        if (isCustom) {
+            refGroup.classList.remove('hidden');
+        } else {
+            refGroup.classList.add('hidden');
+        }
+
+        // Clear saved file path if switching away from custom (optional, but cleaner)
+        if (!isCustom) {
+            state.refAudioPath = null;
+            elements.refAudioFileName.textContent = 'No file selected';
+            // Enable preview button immediately for presets as they don't need a file
+            elements.previewVoiceBtn.disabled = false;
+        } else if (!state.refAudioPath) {
+            // Disable if custom and no file yet
+            elements.previewVoiceBtn.disabled = true;
+        }
+    });
+
     elements.chooseRefAudioBtn.addEventListener('click', selectReferenceAudio);
     elements.previewVoiceBtn.addEventListener('click', previewVoice);
-    elements.refText.addEventListener('input', (e) => {
-        state.refText = e.target.value;
-    });
-    elements.speedSlider.addEventListener('input', (e) => updateSpeed(e.target.value));
+
+    // Removed refText listener
+    // Removed speedSlider listener
+
     elements.chooseOutputBtn.addEventListener('click', selectOutputFolder);
 
     // Generation

@@ -116,8 +116,8 @@ def preview_voice():
     data = request.get_json()
     text = data.get("text", "")
     ref_audio = data.get("ref_audio")
-    ref_text = data.get("ref_text")
-    return jsonify(api.preview_voice(text, ref_audio, ref_text))
+    voice_preset = data.get("voice_preset")
+    return jsonify(api.preview_voice(text, ref_audio, voice_preset))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -131,13 +131,12 @@ def start_synthesis():
     data = request.get_json()
     output_folder = data.get("output_folder")
     ref_audio = data.get("ref_audio")
-    ref_text = data.get("ref_text")
-    speed = data.get("speed", 1.0)
+    voice_preset = data.get("voice_preset")
 
     if not output_folder:
         return jsonify({"success": False, "error": "output_folder is required"})
 
-    return jsonify(api.start_synthesis(output_folder, ref_audio, ref_text, speed))
+    return jsonify(api.start_synthesis(output_folder, ref_audio, voice_preset))
 
 
 @app.route("/api/synthesis_progress", methods=["GET"])
