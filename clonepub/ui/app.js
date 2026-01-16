@@ -337,28 +337,19 @@ const DEFAULT_PREVIEW_TEXT = "Hello! This is a preview of the cloned voice. The 
 
 async function previewVoice() {
     const preset = elements.modelSelect.value;
-
-    if (preset === 'custom' && !state.refAudioPath) {
-        alert('Please select a reference audio file for custom voice cloning');
-        return;
-    }
+    const useClonedVoice = state.refAudioPath !== null;
 
     elements.previewVoiceBtn.disabled = true;
     elements.previewVoiceBtn.innerHTML = '<span class="btn-icon">⏳</span> Generating...';
 
     try {
-        // Prepare args based on selection
-        // Args: text, ref_audio, voice_preset
-        // If preset is selected, ref_audio is null
-        // If custom is selected, voice_preset is null (or 'custom' handled by backend?)
-        // Let's pass 'custom' as preset if custom, but also pass ref_audio
-        // Actually, backend needs to listen to voice_preset.
-
+        // If user has uploaded a reference audio, use voice cloning
+        // Otherwise, use the selected preset
         const result = await callAPI(
             'preview_voice',
             DEFAULT_PREVIEW_TEXT,
-            preset === 'custom' ? state.refAudioPath : null,
-            preset === 'custom' ? null : preset // If custom, preset is None so backend uses ref_audio
+            useClonedVoice ? state.refAudioPath : null,
+            useClonedVoice ? null : preset
         );
 
         if (result && result.success) {
@@ -390,9 +381,12 @@ async function selectReferenceAudio() {
 
     if (filePath) {
         state.refAudioPath = filePath;
-        elements.refAudioFileName.textContent = filePath.split('/').pop();
-        // Enable preview button
-        elements.previewVoiceBtn.disabled = false;
+        const fileDisplay = elements.refAudioFileName;
+        fileDisplay.textContent = filePath.split('/').pop();
+        fileDisplay.classList.add('has-file');
+
+        // Mark clone section as active (user chose to clone)
+        document.getElementById('voiceCloneSection').classList.add('active');
     }
 }
 
@@ -435,17 +429,13 @@ async function startGeneration() {
     }
 
     const preset = elements.modelSelect.value;
-
-    if (preset === 'custom' && !state.refAudioPath) {
-        alert('Please select a reference audio file for custom voice cloning');
-        return;
-    }
+    const useClonedVoice = state.refAudioPath !== null;
 
     const result = await callAPI(
         'start_synthesis',
         state.outputPath,
-        preset === 'custom' ? state.refAudioPath : null,
-        preset === 'custom' ? null : preset
+        useClonedVoice ? state.refAudioPath : null,
+        useClonedVoice ? null : preset
     );
 
     if (result && result.success) {
@@ -646,27 +636,13 @@ function setupEventListeners() {
     // Chapter preview - saved on blur
     elements.chapterPreviewText.addEventListener('blur', saveChapterPreview);
 
-    // Voice selection
-    elements.modelSelect.addEventListener('change', (e) => {
-        const isCustom = e.target.value === 'custom';
-        const refGroup = document.getElementById('voiceRefGroup');
-
-        if (isCustom) {
-            refGroup.classList.remove('hidden');
-        } else {
-            refGroup.classList.add('hidden');
-        }
-
-        // Clear saved file path if switching away from custom (optional, but cleaner)
-        if (!isCustom) {
-            state.refAudioPath = null;
-            elements.refAudioFileName.textContent = 'No file selected';
-            // Enable preview button immediately for presets as they don't need a file
-            elements.previewVoiceBtn.disabled = false;
-        } else if (!state.refAudioPath) {
-            // Disable if custom and no file yet
-            elements.previewVoiceBtn.disabled = true;
-        }
+    // Voice selection - when preset is changed, clear the cloned voice selection
+    elements.modelSelect.addEventListener('change', () => {
+        // User selected a preset, clear any uploaded reference audio
+        state.refAudioPath = null;
+        elements.refAudioFileName.textContent = 'No file selected';
+        elements.refAudioFileName.classList.remove('has-file');
+        document.getElementById('voiceCloneSection').classList.remove('active');
     });
 
     elements.chooseRefAudioBtn.addEventListener('click', selectReferenceAudio);

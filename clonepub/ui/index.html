@@ -153,6 +153,22 @@
                 <div class="settings-panel">
                     <h3>GENERATION SETTINGS</h3>
 
+                    <!-- Voice Cloning Section (Hero Feature) -->
+                    <div class="form-group voice-clone-section" id="voiceCloneSection">
+                        <label><span class="label-icon">🎤</span> Clone Voice</label>
+                        <div class="clone-input-group">
+                            <div class="file-display" id="refAudioFileName">No file selected</div>
+                            <button class="btn btn-secondary btn-sm" id="chooseRefAudioBtn">Choose Audio...</button>
+                        </div>
+                        <p class="help-text">10-30 second audio sample</p>
+                    </div>
+
+                    <!-- OR Divider -->
+                    <div class="or-divider">
+                        <span>OR</span>
+                    </div>
+
+                    <!-- Preset Voices Section -->
                     <div class="form-group">
                         <label>Voice Preset</label>
                         <select id="modelSelect" class="form-select">
@@ -164,20 +180,10 @@
                             <option value="cosette">Cosette</option>
                             <option value="eponine">Eponine</option>
                             <option value="azelma">Azelma</option>
-                            <option value="custom">Custom (Clone Voice)</option>
                         </select>
                     </div>
 
-                    <div class="form-group hidden" id="voiceRefGroup">
-                        <label>Voice Reference</label>
-                        <div class="file-input-group">
-                            <button class="btn btn-secondary btn-sm" id="chooseRefAudioBtn">Choose File...</button>
-                            <span class="file-name" id="refAudioFileName">No file selected</span>
-                        </div>
-                        <p class="help-text text-sm mt-1">Select a short audio clip (10-30s) to clone.</p>
-                    </div>
-
-                    <button class="btn btn-accent btn-full" id="previewVoiceBtn" disabled>
+                    <button class="btn btn-accent btn-full" id="previewVoiceBtn">
                         <span class="btn-icon">🔊</span> Preview Voice
                     </button>
 
