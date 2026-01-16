@@ -18,6 +18,7 @@ const config: ForgeConfig = {
             '../clonepub',
             '../pyproject.toml',
             '../uv.lock',
+            '../README.md',
             // Bundled uv binary
             './assets/uv'
         ],

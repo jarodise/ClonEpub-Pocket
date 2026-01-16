@@ -29,7 +29,7 @@ const pythonSrcPath = isDev
 // In dev mode, use system uv; in packaged mode, use bundled uv
 const uvPath = isDev
     ? 'uv'  // Assume uv is in PATH for development
-    : path.join(resourcesPath, 'assets', 'uv');
+    : path.join(resourcesPath, 'uv');
 
 // User data directory: ~/Library/Application Support/ClonEpub
 const userDataPath = app.getPath('userData');
@@ -85,7 +85,7 @@ async function showSetupWindow(): Promise<void> {
 
     const setupHtmlPath = isDev
         ? path.join(__dirname, '..', 'assets', 'setup.html')
-        : path.join(resourcesPath, 'assets', 'setup.html');
+        : path.join(resourcesPath, 'app', 'assets', 'setup.html');
 
     setupWindow.loadFile(setupHtmlPath);
 }
