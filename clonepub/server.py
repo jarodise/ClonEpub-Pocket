@@ -133,6 +133,12 @@ def start_synthesis():
     ref_audio = data.get("ref_audio")
     voice_preset = data.get("voice_preset")
 
+    # Debug logging
+    print(f"=== start_synthesis Debug ===")
+    print(f"output_folder: {output_folder}")
+    print(f"ref_audio: {ref_audio}")
+    print(f"voice_preset: {voice_preset}")
+
     if not output_folder:
         return jsonify({"success": False, "error": "output_folder is required"})
 

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,7 +11,7 @@
             margin: 0;
             padding: 0;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #0f1419 0%, #1a1f26 100%);
@@ -22,42 +23,52 @@
             justify-content: center;
             -webkit-app-region: drag;
             user-select: none;
+            overflow: hidden;
         }
-        
+
         .container {
             text-align: center;
             padding: 40px;
         }
-        
+
         .icon {
             font-size: 64px;
             margin-bottom: 24px;
             animation: pulse 2s ease-in-out infinite;
         }
-        
+
         @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.05); opacity: 0.8; }
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.05);
+                opacity: 0.8;
+            }
         }
-        
+
         h1 {
             font-size: 24px;
             font-weight: 600;
             margin-bottom: 12px;
         }
-        
+
         p {
             font-size: 14px;
             color: #94a3b8;
             margin-bottom: 32px;
             line-height: 1.5;
         }
-        
+
         .progress-container {
             width: 300px;
             margin: 0 auto;
         }
-        
+
         .progress-bar {
             height: 6px;
             background: #2d3748;
@@ -65,7 +76,7 @@
             overflow: hidden;
             margin-bottom: 12px;
         }
-        
+
         .progress-fill {
             height: 100%;
             background: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
@@ -73,17 +84,22 @@
             animation: indeterminate 1.5s ease-in-out infinite;
             width: 30%;
         }
-        
+
         @keyframes indeterminate {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(400%); }
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(400%);
+            }
         }
-        
+
         .status {
             font-size: 12px;
             color: #64748b;
         }
-        
+
         .note {
             margin-top: 24px;
             font-size: 11px;
@@ -91,23 +107,25 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="icon">🎧</div>
         <h1>Setting up ClonEpub</h1>
         <p>Installing Python dependencies...<br>This may take a few minutes on first launch.</p>
-        
+
         <div class="progress-container">
             <div class="progress-bar">
                 <div class="progress-fill"></div>
             </div>
             <div class="status">Downloading and installing packages...</div>
         </div>
-        
+
         <p class="note">
             Dependencies are cached in ~/Library/Application Support/ClonEpub<br>
             Future launches will be much faster.
         </p>
     </div>
 </body>
+
 </html>
