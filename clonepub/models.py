@@ -6,6 +6,11 @@ from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
 
 
+# HuggingFace Token for Gated Models (Baked-in)
+# READ-ONLY token for kyutai/pocket-tts
+HF_TOKEN = "HF_TOKEN_PLACEHOLDER"
+
+
 @dataclass
 class ModelInfo:
     """Information about a required model."""
@@ -17,7 +22,9 @@ class ModelInfo:
 
 
 # Registry of all required models
-REQUIRED_MODELS: List[ModelInfo] = []
+REQUIRED_MODELS: List[ModelInfo] = [
+    ModelInfo(id="kyutai/pocket-tts", name="Pocket TTS", size_mb=240, type="tts_main"),
+]
 
 SPACY_MODEL = ModelInfo(
     id="en_core_web_sm", name="spaCy English Model", size_mb=12, type="nlp"
@@ -36,7 +43,7 @@ def _model_id_to_cache_name(model_id: str) -> str:
 
 
 def check_model_installed(model_id: str) -> bool:
-    """Check if a HuggingFace model is installed."""
+    """Check if a HuggingFace model is installed and valid."""
     cache_dir = get_huggingface_cache_dir()
     cache_name = _model_id_to_cache_name(model_id)
     model_dir = cache_dir / cache_name
@@ -46,7 +53,13 @@ def check_model_installed(model_id: str) -> bool:
 
     # Check for snapshots (actual model files)
     snapshots_dir = model_dir / "snapshots"
-    if snapshots_dir.exists() and any(snapshots_dir.iterdir()):
+    if not snapshots_dir.exists():
+        return False
+
+    # Check for any .safetensors file in snapshots subdirectories
+    # This prevents returning True for empty model directories
+    found_weights = list(snapshots_dir.rglob("*.safetensors"))
+    if found_weights:
         return True
 
     return False
@@ -126,8 +139,26 @@ def get_ffprobe_path() -> Optional[str]:
 
 
 def check_ffmpeg_installed() -> bool:
-    """Check if ffmpeg is available (bundled or system)."""
-    return get_ffmpeg_path() is not None
+    """Check if ffmpeg is available and runnable."""
+    ffmpeg_path = get_ffmpeg_path()
+    if not ffmpeg_path:
+        return False
+
+    try:
+        import subprocess
+
+        # Try running it to ensure it's not broken (e.g. shared lib issues)
+        subprocess.run([ffmpeg_path, "-version"], capture_output=True, check=True)
+
+        # Also verify ffprobe since we need it for duration checks
+        ffprobe_path = get_ffprobe_path()
+        if ffprobe_path:
+            subprocess.run([ffprobe_path, "-version"], capture_output=True, check=True)
+
+        return True
+    except (subprocess.SubprocessError, OSError) as e:
+        print(f"ffmpeg verified failed: {e}")
+        return False
 
 
 def get_all_dependencies_status() -> Dict[str, Any]:
@@ -182,31 +213,35 @@ def get_all_dependencies_status() -> Dict[str, Any]:
 
 
 def download_huggingface_model(
-    model_id: str, progress_callback: Optional[Callable[[int, int], None]] = None
+    model_id: str,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+    token: Optional[str] = None,
 ) -> bool:
     """
     Download a model from HuggingFace Hub.
 
     Args:
-        model_id: The model ID (e.g., "mlx-community/chatterbox-turbo-fp16")
-        progress_callback: Optional callback(downloaded_bytes, total_bytes)
-
-    Returns:
-        True if successful, False otherwise
+        model_id: The model ID
+        progress_callback: Optional callback
+        token: Optional auth token. If None, tries baked-in HF_TOKEN.
     """
     try:
         from huggingface_hub import snapshot_download
 
+        # Use baked-in token if no custom token provided
+        use_token = token if token else HF_TOKEN
+
         # Download the model
         snapshot_download(
             repo_id=model_id,
+            token=use_token,
             # HuggingFace Hub handles progress internally
-            # We can add tqdm progress bar integration if needed
         )
         return True
     except Exception as e:
         print(f"Error downloading {model_id}: {e}")
-        return False
+        # Re-raise to let API handle it and show error to user
+        raise e
 
 
 def download_spacy_model() -> bool:

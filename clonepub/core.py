@@ -96,7 +96,7 @@ def ensure_compatible_audio(file_path):
                 "-ar",
                 "24000",
                 "-ac",
-                "1",  # Force mono for consistency, or keep stereo? Pocket TTS docs say "mono or stereo"
+                "1",  # Force mono for consistency
                 str(compatible_path),
             ],
             check=True,
@@ -105,7 +105,8 @@ def ensure_compatible_audio(file_path):
         return str(compatible_path)
     except subprocess.CalledProcessError as e:
         print(f"Conversion failed: {e}")
-        return str(path)  # Fallback to original
+        # Failure to convert reference audio is critical for cloning
+        return None
 
 
 class PocketTTSPipeline:
@@ -719,6 +720,7 @@ def generate_audiobook(
                     str(mp3_path),
                 ],
                 capture_output=True,
+                check=True,
             )
 
             temp_wav.unlink()
@@ -727,7 +729,10 @@ def generate_audiobook(
             is_valid, issues = verify_audio_quality(mp3_path, len(text))
             if not is_valid:
                 print(f"Quality issues in {chapter_name}: {issues}")
-                # We still keep it but maybe warn?
+                # Treat as failure
+                if mp3_path.exists():
+                    mp3_path.unlink()
+                raise RuntimeError(f"Audio verification failed: {'; '.join(issues)}")
 
             mp3_files.append(mp3_path)
 
@@ -752,6 +757,10 @@ def generate_audiobook(
             # Original kept them, but let's leave them for now or follow user preference.
             # Original: "To regenerate a chapter, delete its MP3 file and run again." -> implies keeping them.
             return m4b_path
+
+    # If we got here but have no files, something went wrong (e.g. empty chapters)
+    if not mp3_files:
+        raise RuntimeError("No audio files were generated (empty text or errors).")
 
     if progress_callback:
         progress_callback(percent=100, status="Complete (MP3s only)!")

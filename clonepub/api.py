@@ -15,6 +15,8 @@ from clonepub.models import (
     get_all_dependencies_status,
     download_huggingface_model,
     download_spacy_model,
+    check_model_installed,
+    check_spacy_model_installed,
     check_ffmpeg_installed,
     REQUIRED_MODELS,
     SPACY_MODEL,
@@ -57,7 +59,7 @@ class ClonEpubAPI:
             "models": status["models"],
         }
 
-    def start_model_download(self) -> Dict[str, Any]:
+    def start_model_download(self, token: Optional[str] = None) -> Dict[str, Any]:
         """Start downloading all missing models in background."""
         if self._download_thread and self._download_thread.is_alive():
             return {"success": False, "error": "Download already in progress"}
@@ -70,28 +72,43 @@ class ClonEpubAPI:
         }
 
         def run_download():
-            total = len(REQUIRED_MODELS) + 1
+            try:
+                total = len(REQUIRED_MODELS) + 1
 
-            # Download HuggingFace models
-            for i, model in enumerate(REQUIRED_MODELS):
+                # Download HuggingFace models (only if not installed)
+                for i, model in enumerate(REQUIRED_MODELS):
+                    self._download_progress = {
+                        "current_model": model.name,
+                        "model_index": i + 1,
+                        "total_models": total,
+                        "status": "downloading",
+                    }
+                    if not check_model_installed(model.id):
+                        # Pass token if provided (overrides baked-in)
+                        download_huggingface_model(model.id, token=token)
+
+                # Download spaCy model (only if not installed)
                 self._download_progress = {
-                    "current_model": model.name,
-                    "model_index": i + 1,
+                    "current_model": SPACY_MODEL.name,
+                    "model_index": total,
                     "total_models": total,
                     "status": "downloading",
                 }
-                download_huggingface_model(model.id)
+                if not check_spacy_model_installed():
+                    download_spacy_model()
 
-            # Download spaCy model
-            self._download_progress = {
-                "current_model": SPACY_MODEL.name,
-                "model_index": total,
-                "total_models": total,
-                "status": "downloading",
-            }
-            download_spacy_model()
+                self._download_progress["status"] = "complete"
 
-            self._download_progress["status"] = "complete"
+            except Exception as e:
+                print(f"Download error: {e}")
+                self._download_progress["status"] = "error"
+                # Clean up error message for user display
+                error_msg = str(e)
+                if "401" in error_msg or "403" in error_msg:
+                    error_msg = (
+                        "Access Denied (403). Please provide a HuggingFace Token."
+                    )
+                self._download_progress["error"] = error_msg
 
         self._download_thread = threading.Thread(target=run_download, daemon=True)
         self._download_thread.start()

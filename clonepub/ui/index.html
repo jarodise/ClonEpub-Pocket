@@ -44,13 +44,30 @@
                 </button>
             </div>
 
-            <!-- Download Progress (replaces button when downloading) -->
             <div class="download-progress hidden" id="downloadProgress">
                 <p class="download-status" id="downloadStatus">Downloading...</p>
                 <div class="progress-bar">
                     <div class="progress-fill" id="downloadProgressFill"></div>
                 </div>
                 <p class="download-current" id="downloadCurrent">Preparing...</p>
+            </div>
+
+            <!-- Error & Recovery (shown on failure) -->
+            <div class="error-container hidden" id="downloadError">
+                <p class="error-message" id="errorMessage"></p>
+
+                <div class="token-section" id="tokenSection">
+                    <label>Enter HuggingFace Token (Read-only)</label>
+                    <div class="input-row">
+                        <input type="password" id="hfTokenInput" placeholder="hf_..." class="form-input">
+                        <button class="btn btn-primary" id="retryWithTokenBtn">Retry</button>
+                    </div>
+                </div>
+
+                <div class="manual-section">
+                    <p class="tech-note">Or manual import:</p>
+                    <button class="btn btn-secondary btn-sm" id="openModelFolderBtn">📂 Open Folder</button>
+                </div>
             </div>
         </div>
     </div>

@@ -84,6 +84,13 @@ const elements = {
     // ffmpeg Warning
     ffmpegWarning: document.getElementById('ffmpegWarning'),
     dismissFfmpegWarning: document.getElementById('dismissFfmpegWarning'),
+
+    // Setup Error UI
+    downloadError: document.getElementById('downloadError'),
+    errorMessage: document.getElementById('errorMessage'),
+    hfTokenInput: document.getElementById('hfTokenInput'),
+    retryWithTokenBtn: document.getElementById('retryWithTokenBtn'),
+    openModelFolderBtn: document.getElementById('openModelFolderBtn'),
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -104,7 +111,7 @@ const API_ENDPOINTS = {
     'get_downloads_dir': { method: 'GET', path: '/api/downloads_dir' },
     'get_selected_chapters': { method: 'GET', path: '/api/selected_chapters' },
     // POST endpoints
-    'start_model_download': { method: 'POST', path: '/api/start_download' },
+    'start_model_download': { method: 'POST', path: '/api/start_download', mapArgs: (args) => ({ token: args[0] }) },
     'load_epub': { method: 'POST', path: '/api/load_epub', mapArgs: (args) => ({ file_path: args[0] }) },
     'get_chapter_content': { method: 'GET', path: (args) => `/api/chapter/${args[0]}` },
     'update_chapter_content': { method: 'POST', path: (args) => `/api/chapter/${args[0]}/update`, mapArgs: (args) => ({ text: args[1] }) },
@@ -431,6 +438,14 @@ async function startGeneration() {
     const preset = elements.modelSelect.value;
     const useClonedVoice = state.refAudioPath !== null;
 
+    // Debug logging for synthesis parameters
+    console.log('=== startGeneration Debug ===');
+    console.log('outputPath:', state.outputPath);
+    console.log('refAudioPath:', state.refAudioPath);
+    console.log('preset:', preset);
+    console.log('useClonedVoice:', useClonedVoice);
+    console.log('selectedChapters count:', selectedChapters.length);
+
     const result = await callAPI(
         'start_synthesis',
         state.outputPath,
@@ -572,19 +587,30 @@ function showSetupModal(status) {
     elements.setupModal.classList.remove('hidden');
 }
 
-async function startModelDownload() {
-    // Hide button, show progress
+async function startModelDownload(token = null) {
+    // Reset UI state
     elements.startDownloadBtn.style.display = 'none';
+    elements.downloadError.classList.add('hidden');
     elements.downloadProgress.classList.remove('hidden');
 
-    // Start download
-    await callAPI('start_model_download');
+    // Start download (pass token if provided)
+    await callAPI('start_model_download', token);
 
     // Poll progress
     const pollInterval = setInterval(async () => {
         const progress = await callAPI('get_download_progress');
 
         if (progress) {
+            // Handle Error State
+            if (progress.status === 'error') {
+                clearInterval(pollInterval);
+                elements.downloadProgress.classList.add('hidden');
+                elements.downloadError.classList.remove('hidden');
+                elements.errorMessage.textContent = progress.error || 'Unknown download error';
+                console.error("Download Error:", progress.error);
+                return;
+            }
+
             const percent = (progress.model_index / progress.total_models) * 100;
             elements.downloadProgressFill.style.width = `${percent}%`;
             elements.downloadCurrent.textContent = `Downloading ${progress.current_model} (${progress.model_index}/${progress.total_models})`;
@@ -626,8 +652,39 @@ function setupEventListeners() {
     // Header
     elements.openEpubBtn.addEventListener('click', openEpub);
 
-    // Welcome
+    // Welcome - click to open
     elements.dropZone.addEventListener('click', openEpub);
+
+    // Welcome - drag and drop support
+    elements.dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        elements.dropZone.classList.add('dragover');
+    });
+    elements.dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        elements.dropZone.classList.remove('dragover');
+    });
+    elements.dropZone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        elements.dropZone.classList.remove('dragover');
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const file = files[0];
+            // In Electron, files have a 'path' property
+            const filePath = file.path || file.name;
+            console.log('Dropped file:', filePath);
+
+            if (filePath.toLowerCase().endsWith('.epub')) {
+                await loadBook(filePath);
+            } else {
+                alert('Please drop an EPUB file');
+            }
+        }
+    });
 
     // Chapter selection
     elements.selectAllBtn.addEventListener('click', selectAllChapters);
@@ -658,7 +715,26 @@ function setupEventListeners() {
     elements.stopGenerationBtn.addEventListener('click', stopGeneration);
 
     // Setup modal
-    elements.startDownloadBtn.addEventListener('click', startModelDownload);
+    // Setup modal
+    elements.startDownloadBtn.addEventListener('click', () => startModelDownload());
+    elements.retryWithTokenBtn.addEventListener('click', () => {
+        const token = elements.hfTokenInput.value.trim();
+        if (token) startModelDownload(token);
+    });
+
+    elements.openModelFolderBtn.addEventListener('click', async () => {
+        // Try to open cache folder
+        if (isElectron && window.electronAPI && window.electronAPI.openPath) {
+            // We need the path. We'll use a hardcoded helper or ask API
+            // For now, let's just alert the instruction as a fallback
+            // Real implementation requires get_huggingface_cache_dir API call
+            const result = await callAPI('get_downloads_dir'); // abuse this for now? No.
+            // Let's rely on the text description in the modal for now
+            alert("Please open ~/.cache/huggingface/hub/ manually.");
+        } else {
+            alert("Folder: ~/.cache/huggingface/hub/");
+        }
+    });
 
     // ffmpeg warning
     elements.dismissFfmpegWarning.addEventListener('click', () => {
