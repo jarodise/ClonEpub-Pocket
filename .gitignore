@@ -22,6 +22,11 @@ dist/
 *.egg-info/
 *.egg
 
+# Electron build outputs
+electron/out/
+electron/node_modules/
+node_modules/
+
 # Bundled binaries (copied during build)
 clonepub/bin/
 
