@@ -37,6 +37,12 @@ ClonEpub uses **[Pocket TTS](https://github.com/kyutai-labs/pocket-tts)** by Kyu
 3. Open the DMG and drag ClonEpub to your Applications folder
 4. Launch ClonEpub — models will download automatically on first run
 
+> **⚠️ macOS Gatekeeper Warning**: If you see *"ClonEpub is damaged and can't be opened"*, run this command in Terminal:
+> ```bash
+> xattr -cr /Applications/ClonEpub.app
+> ```
+> This removes the quarantine flag that macOS adds to unsigned apps.
+
 ### Option 2: Build from Source
 
 #### Requirements
