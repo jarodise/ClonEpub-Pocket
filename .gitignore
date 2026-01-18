@@ -16,6 +16,10 @@ env/
 *.swo
 .DS_Store
 
+# Local secrets (never commit)
+.env.local
+.env
+
 # Build
 build/
 dist/

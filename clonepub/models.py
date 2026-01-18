@@ -1,14 +1,16 @@
 """ClonEpub Model Manager - Handles model downloading and status checking."""
 
+import os
 import shutil
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
 
 
-# HuggingFace Token for Gated Models (Baked-in)
-# READ-ONLY token for kyutai/pocket-tts
-HF_TOKEN = "HF_TOKEN_PLACEHOLDER"
+# HuggingFace Token for Gated Models
+# Set via HF_TOKEN environment variable or .env.local file
+# For releases, the build process injects this from the environment
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
 
 @dataclass
