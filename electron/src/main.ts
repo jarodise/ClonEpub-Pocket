@@ -66,7 +66,25 @@ function getPythonPath(): string {
 
 function isEnvironmentReady(): boolean {
     const pythonPath = getPythonPath();
-    return fs.existsSync(pythonPath);
+    if (!fs.existsSync(pythonPath)) return false;
+
+    // Check if venv was created for the current app version
+    // This ensures uv sync runs again after app updates
+    const versionFile = path.join(venvPath, '.clonepub-version');
+    const currentVersion = app.getVersion();
+    try {
+        const installedVersion = fs.readFileSync(versionFile, 'utf-8').trim();
+        if (installedVersion !== currentVersion) {
+            log.info(`Version mismatch: venv has ${installedVersion}, app is ${currentVersion}. Will re-sync.`);
+            return false;
+        }
+    } catch {
+        // No version file = old venv, needs re-sync
+        log.info('No version stamp found in venv. Will re-sync.');
+        return false;
+    }
+
+    return true;
 }
 
 async function showSetupWindow(): Promise<void> {
@@ -124,6 +142,11 @@ async function setupPythonEnvironment(): Promise<boolean> {
         });
 
         log.info('Python environment setup complete!');
+
+        // Write version stamp so we know this venv matches the app version
+        const versionFile = path.join(venvPath, '.clonepub-version');
+        fs.writeFileSync(versionFile, app.getVersion());
+
         return true;
     } catch (error) {
         log.error('Failed to setup Python environment:', error);
