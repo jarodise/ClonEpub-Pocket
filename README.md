@@ -9,6 +9,7 @@ Convert EPUB e-books to high-quality audiobooks with voice cloning. A standalone
 - 📖 **EPUB to Audiobook** — Load any EPUB file and convert it to a high-quality audiobook
 - 🎤 **Voice Cloning** — Clone any voice from a 10-30 second audio sample
 - 🔊 **Built-in Voice Presets** — 8 ready-to-use voices with different styles
+- 💾 **Save Custom Voices** — Save cloned voices as reusable presets for future use
 - 💻 **CPU-Only** — Runs efficiently on any modern CPU, no GPU required
 - ⚡ **Fast Generation** — ~6x real-time speed on Apple Silicon, ~200ms latency for first chunk
 - 🖥️ **Standalone App** — Self-contained Electron app with bundled Python backend
@@ -82,9 +83,19 @@ This creates a `.dmg` file in `electron/out/make/`.
 
 1. **Open EPUB** — Click "Open EPUB" to load your e-book
 2. **Select Chapters** — Use the chapter list to select which chapters to convert
-3. **Choose Voice** — Select a voice preset or upload your own audio sample for cloning
+3. **Choose Voice** — Select a built-in preset, a saved custom voice, or upload a new audio sample
 4. **Preview** — Click "Preview Voice" to hear a sample
 5. **Generate** — Click "Start Generation" to create your audiobook
+
+### Voice Presets
+
+ClonEpub supports three voice sources:
+
+- **Built-in Presets** — 8 ready-to-use voices (see table below)
+- **Saved Custom Voices** — Your own cloned voices, saved as reusable presets
+- **Upload Audio** — One-off voice cloning from any audio sample
+
+To save a custom voice: upload an audio sample, give it a name, and click **"Save as Preset"**. Saved voices appear at the top of the voice selector and persist across sessions.
 
 ### Voice Cloning Tips
 
@@ -93,7 +104,7 @@ For best results with custom voice cloning:
 - Use a **10-30 second** clear audio sample
 - **Single speaker** only, minimal background noise
 - **Clear enunciation** works best
-- **WAV or MP3** format supported
+- **WAV, MP3, or M4A** format supported
 
 ### Built-in Voice Presets
 
@@ -127,13 +138,24 @@ On first launch, ClonEpub automatically downloads:
 
 Models are cached in `~/.cache/huggingface/` and only need to be downloaded once.
 
-### HuggingFace Access
+### HuggingFace Access (Voice Cloning)
 
-Voice cloning requires access to the gated `kyutai/pocket-tts` model:
+Voice cloning requires access to the gated `kyutai/pocket-tts` model. If you see this error:
 
-1. Create a [HuggingFace account](https://huggingface.co/join)
-2. Accept the license at [kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts)
-3. The app will prompt for your HuggingFace token if needed
+> *"We could not download the weights for the model with voice cloning, but you're trying to use voice cloning."*
+
+Follow these steps to fix it:
+
+1. **Create a HuggingFace account** at [huggingface.co/join](https://huggingface.co/join)
+2. **Create an access token** at [HuggingFace Settings → Tokens](https://huggingface.co/settings/tokens)
+3. **Log in locally** — run this in your terminal and paste your token when prompted:
+   ```bash
+   uvx hf auth login
+   ```
+4. **Accept the model license** — visit [kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts) while logged in to your HuggingFace account and click **"Agree and access repository"**
+5. **Restart the app** — the voice cloning weights will download automatically
+
+> **Note**: If you don't need voice cloning, you can skip this entirely and use the 8 built-in voice presets (`alba`, `marius`, `javert`, `jean`, `fantine`, `cosette`, `eponine`, `azelma`).
 
 ## ⚠️ Prohibited Use
 

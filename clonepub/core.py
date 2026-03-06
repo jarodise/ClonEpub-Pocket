@@ -8,6 +8,7 @@ Based on audiblez by Claudio Santini 2025 - https://claudio.uk
 """
 
 import os
+import json
 import traceback
 
 import spacy
@@ -29,14 +30,27 @@ from clonepub.models import get_ffmpeg_path, get_ffprobe_path
 # User plan: "Remove mlx-audio dependency", "Remove ChatterboxPipeline and mlx_audio imports"
 
 try:
-    from pocket_tts import TTSModel
+    from pocket_tts import TTSModel, export_model_state
 except ImportError:
     TTSModel = None
+    export_model_state = None
 
 sample_rate = 24000
 
 # Singleton for TTS model
 _tts_model_instance = None
+
+# Built-in voice presets from Pocket TTS
+BUILTIN_VOICES = [
+    {"id": "marius",  "name": "Marius (Default)", "type": "builtin"},
+    {"id": "alba",    "name": "Alba",             "type": "builtin"},
+    {"id": "javert",  "name": "Javert",           "type": "builtin"},
+    {"id": "jean",    "name": "Jean",             "type": "builtin"},
+    {"id": "fantine", "name": "Fantine",          "type": "builtin"},
+    {"id": "cosette", "name": "Cosette",          "type": "builtin"},
+    {"id": "eponine", "name": "Eponine",          "type": "builtin"},
+    {"id": "azelma",  "name": "Azelma",           "type": "builtin"},
+]
 
 
 def get_tts_model():
@@ -52,6 +66,142 @@ def get_tts_model():
             print(f"Failed to load Pocket TTS model: {e}")
             raise
     return _tts_model_instance
+
+
+def get_voices_dir():
+    """Get the custom voices directory, creating it if needed."""
+    voices_dir = get_app_support_dir() / "voices"
+    voices_dir.mkdir(parents=True, exist_ok=True)
+    return voices_dir
+
+
+def list_voices():
+    """Return all available voices: saved custom voices first, then built-in presets."""
+    voices = []
+
+    # Custom voices (from saved .safetensors files)
+    voices_dir = get_voices_dir()
+    for meta_file in sorted(voices_dir.glob("*.json")):
+        try:
+            with open(meta_file, "r") as f:
+                meta = json.load(f)
+            voice_id = meta_file.stem
+            safetensors_path = voices_dir / f"{voice_id}.safetensors"
+            if safetensors_path.exists():
+                voices.append({
+                    "id": f"custom:{voice_id}",
+                    "name": meta.get("name", voice_id),
+                    "type": "custom",
+                })
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    # Built-in voices
+    voices.extend(BUILTIN_VOICES)
+
+    return voices
+
+
+def save_custom_voice(audio_path, name):
+    """Save a custom voice as a reusable preset using export_model_state.
+
+    Args:
+        audio_path: Path to the audio file to extract voice from.
+        name: Display name for the voice preset.
+
+    Returns:
+        dict with voice_id on success, or error on failure.
+    """
+    if export_model_state is None:
+        return {"success": False, "error": "pocket-tts export_model_state not available"}
+
+    try:
+        model = get_tts_model()
+
+        # Ensure compatible audio
+        compatible_path = ensure_compatible_audio(audio_path)
+        if not compatible_path:
+            return {"success": False, "error": "Could not process audio file"}
+
+        # Extract voice state
+        model_state = model.get_state_for_audio_prompt(compatible_path)
+
+        # Generate a filesystem-safe voice ID from the name
+        voice_id = "".join(
+            c for c in name.lower().replace(" ", "_") if c.isalnum() or c == "_"
+        ).strip("_")
+        if not voice_id:
+            voice_id = "custom_voice"
+
+        # Ensure unique ID
+        voices_dir = get_voices_dir()
+        base_id = voice_id
+        counter = 1
+        while (voices_dir / f"{voice_id}.safetensors").exists():
+            voice_id = f"{base_id}_{counter}"
+            counter += 1
+
+        # Save the voice state as .safetensors
+        safetensors_path = voices_dir / f"{voice_id}.safetensors"
+        export_model_state(model_state, str(safetensors_path))
+
+        # Save metadata
+        meta_path = voices_dir / f"{voice_id}.json"
+        with open(meta_path, "w") as f:
+            json.dump({
+                "name": name,
+                "source_audio": str(audio_path),
+            }, f, indent=2)
+
+        return {"success": True, "voice_id": f"custom:{voice_id}"}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def delete_custom_voice(voice_id):
+    """Delete a saved custom voice.
+
+    Args:
+        voice_id: The voice ID (with or without 'custom:' prefix).
+
+    Returns:
+        dict with success status.
+    """
+    # Strip the custom: prefix if present
+    if voice_id.startswith("custom:"):
+        voice_id = voice_id[len("custom:"):]
+
+    voices_dir = get_voices_dir()
+    safetensors_path = voices_dir / f"{voice_id}.safetensors"
+    meta_path = voices_dir / f"{voice_id}.json"
+
+    if not safetensors_path.exists() and not meta_path.exists():
+        return {"success": False, "error": "Voice not found"}
+
+    if safetensors_path.exists():
+        safetensors_path.unlink()
+    if meta_path.exists():
+        meta_path.unlink()
+
+    return {"success": True}
+
+
+def resolve_voice_preset(voice_preset):
+    """Resolve a voice preset ID to the appropriate argument for get_state_for_audio_prompt.
+
+    For custom voices (prefixed with 'custom:'), returns the .safetensors path.
+    For built-in voices, returns the voice name string as-is.
+    """
+    if voice_preset and voice_preset.startswith("custom:"):
+        voice_id = voice_preset[len("custom:"):]
+        safetensors_path = get_voices_dir() / f"{voice_id}.safetensors"
+        if safetensors_path.exists():
+            return str(safetensors_path)
+        else:
+            print(f"Warning: Custom voice '{voice_id}' not found, falling back to 'marius'")
+            return "marius"
+    return voice_preset
 
 
 def ensure_compatible_audio(file_path):
@@ -120,6 +270,7 @@ class PocketTTSPipeline:
         self.ref_audio = ensure_compatible_audio(ref_audio) if ref_audio else None
         self.voice_preset = voice_preset
         self._nlp = None
+        self._cached_model_state = None
         # Pre-load model
         self.model = get_tts_model()
 
@@ -160,32 +311,28 @@ class PocketTTSPipeline:
         """Generate audio for a single text segment using Pocket TTS."""
         cleaned_text = self._clean_text_for_tts(text)
 
-        print(
-            f"DEBUG: Processing Audio - ref_audio present? {bool(self.ref_audio)}, voice_preset={self.voice_preset}"
-        )
-
         try:
-            # Prepare audio prompt
-            if self.ref_audio:
-                # Use provided reference audio (Custom voice cloning)
-                model_state = self.model.get_state_for_audio_prompt(self.ref_audio)
-            elif self.voice_preset:
-                # Use selected preset
-                # Map 'custom' to fallback if it slipped through, though it shouldn't
-                voice = self.voice_preset if self.voice_preset != "custom" else "marius"
-                try:
-                    model_state = self.model.get_state_for_audio_prompt(voice)
-                except Exception as e:
-                    print(
-                        f"Warning: Preset '{voice}' failed ({e}). Falling back to 'marius'."
-                    )
-                    model_state = self.model.get_state_for_audio_prompt("marius")
-            else:
-                # Default fallback
-                model_state = self.model.get_state_for_audio_prompt("marius")
+            # Prepare audio prompt — use cached model state if available
+            if self._cached_model_state is None:
+                if self.ref_audio:
+                    # Use provided reference audio (Custom voice cloning)
+                    self._cached_model_state = self.model.get_state_for_audio_prompt(self.ref_audio)
+                elif self.voice_preset:
+                    # Resolve custom: prefix to .safetensors path
+                    resolved = resolve_voice_preset(self.voice_preset)
+                    try:
+                        self._cached_model_state = self.model.get_state_for_audio_prompt(resolved)
+                    except Exception as e:
+                        print(
+                            f"Warning: Preset '{resolved}' failed ({e}). Falling back to 'marius'."
+                        )
+                        self._cached_model_state = self.model.get_state_for_audio_prompt("marius")
+                else:
+                    # Default fallback
+                    self._cached_model_state = self.model.get_state_for_audio_prompt("marius")
 
             audio = self.model.generate_audio(
-                model_state=model_state,
+                model_state=self._cached_model_state,
                 text_to_generate=cleaned_text,
             )
 

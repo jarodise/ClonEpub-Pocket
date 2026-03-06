@@ -10,6 +10,9 @@ from clonepub.core import (
     load_epub,
     generate_audiobook,
     PocketTTSPipeline,
+    list_voices,
+    save_custom_voice,
+    delete_custom_voice,
 )
 from clonepub.models import (
     get_all_dependencies_status,
@@ -210,6 +213,30 @@ class ClonEpubAPI:
     def get_selected_chapters(self) -> List[Dict[str, Any]]:
         """Get list of selected chapters."""
         return [c for c in self._chapters if c.get("selected", False)]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Voice Management
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def list_voices(self) -> Dict[str, Any]:
+        """Get all available voices (custom + built-in)."""
+        try:
+            voices = list_voices()
+            return {"success": True, "voices": voices}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def save_voice(self, audio_path: str, name: str) -> Dict[str, Any]:
+        """Save a custom audio file as a reusable voice preset."""
+        if not audio_path or not name:
+            return {"success": False, "error": "audio_path and name are required"}
+        return save_custom_voice(audio_path, name)
+
+    def delete_voice(self, voice_id: str) -> Dict[str, Any]:
+        """Delete a saved custom voice."""
+        if not voice_id:
+            return {"success": False, "error": "voice_id is required"}
+        return delete_custom_voice(voice_id)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Voice Cloning

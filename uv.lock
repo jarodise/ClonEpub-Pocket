@@ -290,7 +290,7 @@ requires-dist = [
     { name = "flask", specifier = ">=3.1.2" },
     { name = "flask-cors", specifier = ">=6.0.2" },
     { name = "lxml", specifier = ">=5.0.0" },
-    { name = "pocket-tts" },
+    { name = "pocket-tts", specifier = ">=1.1.1" },
     { name = "pywebview", specifier = ">=5.0" },
     { name = "soundfile", specifier = ">=0.13.1" },
     { name = "spacy", specifier = ">=3.8.3" },
@@ -993,7 +993,7 @@ wheels = [
 
 [[package]]
 name = "pocket-tts"
-version = "1.0.1"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beartype" },
@@ -1014,9 +1014,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/17/fe/aa8f2f7dd2013e9333c376408da8a30a6c55965dfbf7d8a5f8146799df33/pocket_tts-1.0.1.tar.gz", hash = "sha256:e721353a4343e945c840420734877a9ee5e9c218561fcc31a9a72bb6b29cfa8d", size = 520219, upload-time = "2026-01-13T17:12:56.103Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/3e/2f15ee05b3dcf6ec08251f5030a3deb4643d2ecd55e17a4ca8998888c1df/pocket_tts-1.1.1.tar.gz", hash = "sha256:cdd234e49299e8fe927bd0b93c164c7785bdd83bed302622e218bcda3944f603", size = 618656, upload-time = "2026-02-17T17:16:25.393Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1b/d7/4eed87a4fe4aedcf519966852ac57306508fbac89843f5ab419c937dd855/pocket_tts-1.0.1-py3-none-any.whl", hash = "sha256:f78a81d748c9dac53a5a585276498a73b3a717afc0040c15f1a413239c3214f4", size = 48216, upload-time = "2026-01-13T17:12:54.482Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/9d/b8957a9c738ac4c6f29f84cf268c3ff766ea96d4d5212d0c7320193e6394/pocket_tts-1.1.1-py3-none-any.whl", hash = "sha256:46d97789a4a1aa655b3b9659d6e880f79eda56f5fb03d4444fd0e9318e1224dd", size = 52529, upload-time = "2026-02-17T17:16:23.528Z" },
 ]
 
 [[package]]

@@ -643,91 +643,215 @@ body {
     margin-top: var(--space-xs);
 }
 
-/* Voice Clone Section */
-\n
-/* Container has no specific styles - uses form-group defaults */
+/* Voice Section - Unified Dropdown */
 
-.voice-clone-section.active .file-display {
-    color: var(--accent-teal);
-    border-color: var(--accent-teal);
+.voice-section {
+    gap: var(--space-sm) !important;
 }
 
-.voice-clone-section label {
+.voice-section label {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    margin-bottom: var(--space-xs);
 }
 
 .label-icon {
     font-size: 14px;
 }
 
-.clone-input-group {
-    display: flex;
-    align-items: stretch;
-    gap: 0;
-    margin-bottom: var(--space-xs);
+/* Custom Dropdown */
+.voice-dropdown {
+    position: relative;
 }
 
-.file-display {
-    flex: 1;
+.voice-dropdown-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: var(--space-sm) var(--space-md);
     background: var(--bg-input);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
-    border-right: none;
-    color: var(--text-muted);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
     font-size: 13px;
-    display: flex;
-    align-items: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
     min-height: 36px;
 }
 
-.file-display.has-file {
-    color: var(--accent-teal);
+.voice-dropdown-trigger:hover {
+    border-color: var(--accent-primary);
 }
 
-.clone-input-group .btn {
-    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+.voice-dropdown-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.voice-dropdown-arrow {
+    color: var(--text-muted);
+    font-size: 12px;
     flex-shrink: 0;
 }
 
-.voice-clone-section .help-text {
-    font-size: 11px;
+.voice-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: var(--space-xs) 0;
+}
+
+.voice-dropdown-header {
+    padding: var(--space-xs) var(--space-md);
+    font-size: 10px;
+    font-weight: 600;
     color: var(--text-muted);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
     margin-top: var(--space-xs);
 }
 
-/* OR Divider */
-.or-divider {
+.voice-dropdown-header:first-child {
+    margin-top: 0;
+}
+
+.voice-dropdown-item {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
-    margin: var(--space-lg) 0;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    font-size: 13px;
+    color: var(--text-primary);
 }
 
-.or-divider::before,
-.or-divider::after {
-    content: '';
+.voice-dropdown-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.voice-dropdown-item.selected {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--accent-primary);
+}
+
+.voice-item-name {
     flex: 1;
-    height: 1px;
-    background: var(--border-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.or-divider span {
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-muted);
-    letter-spacing: 0.5px;
+.voice-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+    opacity: 0;
+    transition: opacity var(--transition-fast), background var(--transition-fast);
 }
+
+.voice-dropdown-item:hover .voice-delete-btn {
+    opacity: 0.6;
+}
+
+.voice-delete-btn:hover {
+    opacity: 1 !important;
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.voice-upload-item {
+    color: var(--accent-teal);
+}
+
+/* Upload Info */
+.voice-upload-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-md);
+    background: rgba(20, 184, 166, 0.08);
+    border: 1px solid rgba(20, 184, 166, 0.2);
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    color: var(--accent-teal);
+}
+
+.upload-file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    font-size: 14px;
+}
+
+.btn-link:hover {
+    color: var(--text-primary);
+}
+
+/* Voice Actions */
+.voice-actions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+/* Save Voice Form */
+.save-voice-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.form-input {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.form-input::placeholder {
+    color: var(--text-muted);
+}
+
+.save-voice-actions {
+    display: flex;
+    gap: var(--space-sm);
+    justify-content: flex-end;
+}
+
 
 .generation-section {
     margin-top: auto;

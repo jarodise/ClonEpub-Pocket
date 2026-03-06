@@ -106,6 +106,32 @@ def selected_chapters():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Voice Management
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@app.route("/api/voices", methods=["GET"])
+def list_voices():
+    """Get all available voices (custom + built-in)."""
+    return jsonify(api.list_voices())
+
+
+@app.route("/api/voices/save", methods=["POST"])
+def save_voice():
+    """Save a custom audio file as a reusable voice preset."""
+    data = request.get_json()
+    audio_path = data.get("audio_path")
+    name = data.get("name")
+    return jsonify(api.save_voice(audio_path, name))
+
+
+@app.route("/api/voices/<voice_id>", methods=["DELETE"])
+def delete_voice(voice_id):
+    """Delete a saved custom voice."""
+    return jsonify(api.delete_voice(voice_id))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Voice Cloning
 # ─────────────────────────────────────────────────────────────────────────────
 

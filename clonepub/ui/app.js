@@ -12,10 +12,13 @@ const state = {
     book: null,
     chapters: [],
     selectedPreviewChapter: null,
-    refAudioPath: null,
-    refText: '',
+    // Voice management
+    selectedVoiceId: 'marius',     // Currently selected voice (builtin or custom:xxx)
+    selectedVoiceName: 'Marius (Default)',
+    refAudioPath: null,             // Temp file path for unsaved custom audio
+    voices: [],                     // Loaded from API
+    // Output
     outputPath: null,
-    speed: 1.0,
     synthesisRunning: false,
     progressInterval: null,
 };
@@ -54,13 +57,19 @@ const elements = {
     chapterPreviewText: document.getElementById('chapterPreviewText'),
 
     // Settings
-    modelSelect: document.getElementById('modelSelect'),
-    chooseRefAudioBtn: document.getElementById('chooseRefAudioBtn'),
-    refAudioFileName: document.getElementById('refAudioFileName'),
-    refText: document.getElementById('refText'),
+    voiceDropdown: document.getElementById('voiceDropdown'),
+    voiceDropdownTrigger: document.getElementById('voiceDropdownTrigger'),
+    voiceDropdownLabel: document.getElementById('voiceDropdownLabel'),
+    voiceDropdownMenu: document.getElementById('voiceDropdownMenu'),
+    voiceUploadInfo: document.getElementById('voiceUploadInfo'),
+    uploadFileName: document.getElementById('uploadFileName'),
+    clearUploadBtn: document.getElementById('clearUploadBtn'),
     previewVoiceBtn: document.getElementById('previewVoiceBtn'),
-    speedSlider: document.getElementById('speedSlider'),
-    speedValue: document.getElementById('speedValue'),
+    saveVoiceBtn: document.getElementById('saveVoiceBtn'),
+    saveVoiceForm: document.getElementById('saveVoiceForm'),
+    saveVoiceName: document.getElementById('saveVoiceName'),
+    saveVoiceConfirmBtn: document.getElementById('saveVoiceConfirmBtn'),
+    saveVoiceCancelBtn: document.getElementById('saveVoiceCancelBtn'),
     chooseOutputBtn: document.getElementById('chooseOutputBtn'),
     outputPath: document.getElementById('outputPath'),
 
@@ -119,6 +128,10 @@ const API_ENDPOINTS = {
     'preview_voice': { method: 'POST', path: '/api/preview_voice', mapArgs: (args) => ({ text: args[0], ref_audio: args[1], voice_preset: args[2] }) },
     'start_synthesis': { method: 'POST', path: '/api/start_synthesis', mapArgs: (args) => ({ output_folder: args[0], ref_audio: args[1], voice_preset: args[2] }) },
     'stop_synthesis': { method: 'POST', path: '/api/stop_synthesis' },
+    // Voice management
+    'list_voices': { method: 'GET', path: '/api/voices' },
+    'save_voice': { method: 'POST', path: '/api/voices/save', mapArgs: (args) => ({ audio_path: args[0], name: args[1] }) },
+    'delete_voice': { method: 'DELETE', path: (args) => `/api/voices/${args[0]}` },
 };
 
 async function callAPI(method, ...args) {
@@ -343,20 +356,18 @@ async function saveChapterPreview() {
 const DEFAULT_PREVIEW_TEXT = "Hello! This is a preview of the cloned voice. The quick brown fox jumps over the lazy dog.";
 
 async function previewVoice() {
-    const preset = elements.modelSelect.value;
-    const useClonedVoice = state.refAudioPath !== null;
-
     elements.previewVoiceBtn.disabled = true;
     elements.previewVoiceBtn.innerHTML = '<span class="btn-icon">⏳</span> Generating...';
 
     try {
-        // If user has uploaded a reference audio, use voice cloning
-        // Otherwise, use the selected preset
+        // If user has uploaded a custom audio file (not yet saved), use ref_audio
+        // Otherwise, use the selected voice preset
+        const useCustomUpload = state.refAudioPath !== null;
         const result = await callAPI(
             'preview_voice',
             DEFAULT_PREVIEW_TEXT,
-            useClonedVoice ? state.refAudioPath : null,
-            useClonedVoice ? null : preset
+            useCustomUpload ? state.refAudioPath : null,
+            useCustomUpload ? null : state.selectedVoiceId
         );
 
         if (result && result.success) {
@@ -367,44 +378,198 @@ async function previewVoice() {
         }
     } finally {
         elements.previewVoiceBtn.disabled = false;
-        elements.previewVoiceBtn.innerHTML = '<span class="btn-icon">🔊</span> Preview Voice';
+        elements.previewVoiceBtn.innerHTML = '<span class="btn-icon">🔊</span> Preview';
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Settings
+// Voice Management
 // ─────────────────────────────────────────────────────────────────────────
 
-async function selectReferenceAudio() {
-    let filePath;
+async function loadVoices() {
+    const result = await callAPI('list_voices');
+    if (result && result.success) {
+        state.voices = result.voices;
+        renderVoiceDropdown();
+    }
+}
 
+function renderVoiceDropdown() {
+    const menu = elements.voiceDropdownMenu;
+    menu.innerHTML = '';
+
+    const customVoices = state.voices.filter(v => v.type === 'custom');
+    const builtinVoices = state.voices.filter(v => v.type === 'builtin');
+
+    // My Voices section
+    if (customVoices.length > 0) {
+        const header = document.createElement('div');
+        header.className = 'voice-dropdown-header';
+        header.textContent = 'My Voices';
+        menu.appendChild(header);
+
+        customVoices.forEach(voice => {
+            const item = document.createElement('div');
+            item.className = 'voice-dropdown-item' + (state.selectedVoiceId === voice.id ? ' selected' : '');
+            item.innerHTML = `
+                <span class="voice-item-name">${escapeHtml(voice.name)}</span>
+                <button class="voice-delete-btn" data-voice-id="${voice.id}" title="Delete voice">🗑️</button>
+            `;
+            item.querySelector('.voice-item-name').addEventListener('click', () => selectVoice(voice.id, voice.name));
+            item.querySelector('.voice-delete-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteVoice(voice.id, voice.name);
+            });
+            menu.appendChild(item);
+        });
+    }
+
+    // Upload option
+    const uploadHeader = document.createElement('div');
+    uploadHeader.className = 'voice-dropdown-header';
+    uploadHeader.textContent = 'Custom';
+    menu.appendChild(uploadHeader);
+
+    const uploadItem = document.createElement('div');
+    uploadItem.className = 'voice-dropdown-item voice-upload-item';
+    uploadItem.innerHTML = '<span class="voice-item-name">📂 Upload audio file...</span>';
+    uploadItem.addEventListener('click', () => uploadCustomAudio());
+    menu.appendChild(uploadItem);
+
+    // Built-in section
+    const builtinHeader = document.createElement('div');
+    builtinHeader.className = 'voice-dropdown-header';
+    builtinHeader.textContent = 'Built-in';
+    menu.appendChild(builtinHeader);
+
+    builtinVoices.forEach(voice => {
+        const item = document.createElement('div');
+        item.className = 'voice-dropdown-item' + (state.selectedVoiceId === voice.id ? ' selected' : '');
+        item.innerHTML = `<span class="voice-item-name">${escapeHtml(voice.name)}</span>`;
+        item.addEventListener('click', () => selectVoice(voice.id, voice.name));
+        menu.appendChild(item);
+    });
+}
+
+function selectVoice(voiceId, voiceName) {
+    state.selectedVoiceId = voiceId;
+    state.selectedVoiceName = voiceName;
+    state.refAudioPath = null; // Clear any unsaved upload
+    elements.voiceDropdownLabel.textContent = voiceName;
+    elements.voiceDropdownMenu.classList.add('hidden');
+    elements.voiceUploadInfo.classList.add('hidden');
+    elements.saveVoiceBtn.classList.add('hidden');
+    renderVoiceDropdown(); // Re-render to update selected state
+}
+
+async function uploadCustomAudio() {
+    elements.voiceDropdownMenu.classList.add('hidden');
+
+    let filePath;
     if (isElectron && window.electronAPI) {
-        // Electron: use native dialog via IPC
         filePath = await window.electronAPI.openAudioDialog();
     } else {
-        // PyWebView: use built-in dialog
         filePath = await callAPI('select_reference_audio');
     }
 
     if (filePath) {
         state.refAudioPath = filePath;
-        const fileDisplay = elements.refAudioFileName;
-        fileDisplay.textContent = filePath.split('/').pop();
-        fileDisplay.classList.add('has-file');
-
-        // Mark clone section as active (user chose to clone)
-        document.getElementById('voiceCloneSection').classList.add('active');
+        const fileName = filePath.split('/').pop();
+        elements.uploadFileName.textContent = fileName;
+        elements.voiceUploadInfo.classList.remove('hidden');
+        elements.saveVoiceBtn.classList.remove('hidden');
+        elements.voiceDropdownLabel.textContent = `Custom: ${fileName}`;
     }
 }
+
+function clearCustomUpload() {
+    state.refAudioPath = null;
+    elements.voiceUploadInfo.classList.add('hidden');
+    elements.saveVoiceBtn.classList.add('hidden');
+    // Restore previous voice selection
+    elements.voiceDropdownLabel.textContent = state.selectedVoiceName;
+}
+
+function showSaveVoiceForm() {
+    elements.saveVoiceForm.classList.remove('hidden');
+    elements.saveVoiceName.value = '';
+    elements.saveVoiceName.focus();
+}
+
+function hideSaveVoiceForm() {
+    elements.saveVoiceForm.classList.add('hidden');
+}
+
+async function saveVoiceAsPreset() {
+    const name = elements.saveVoiceName.value.trim();
+    if (!name) {
+        alert('Please enter a name for the voice preset.');
+        return;
+    }
+    if (!state.refAudioPath) {
+        alert('No audio file selected.');
+        return;
+    }
+
+    elements.saveVoiceConfirmBtn.disabled = true;
+    elements.saveVoiceConfirmBtn.textContent = 'Saving...';
+
+    try {
+        const result = await callAPI('save_voice', state.refAudioPath, name);
+        if (result && result.success) {
+            hideSaveVoiceForm();
+            // Select the newly saved voice
+            state.refAudioPath = null;
+            elements.voiceUploadInfo.classList.add('hidden');
+            elements.saveVoiceBtn.classList.add('hidden');
+            // Reload voices and select the new one
+            await loadVoices();
+            selectVoice(result.voice_id, name);
+        } else {
+            alert(`Failed to save voice: ${result?.error || 'Unknown error'}`);
+        }
+    } finally {
+        elements.saveVoiceConfirmBtn.disabled = false;
+        elements.saveVoiceConfirmBtn.textContent = 'Save';
+    }
+}
+
+async function deleteVoice(voiceId, voiceName) {
+    if (!confirm(`Delete voice "${voiceName}"?`)) return;
+
+    const result = await callAPI('delete_voice', voiceId);
+    if (result && result.success) {
+        // If the deleted voice was selected, fall back to default
+        if (state.selectedVoiceId === voiceId) {
+            selectVoice('marius', 'Marius (Default)');
+        }
+        await loadVoices();
+    } else {
+        alert(`Failed to delete: ${result?.error || 'Unknown error'}`);
+    }
+}
+
+function toggleVoiceDropdown() {
+    elements.voiceDropdownMenu.classList.toggle('hidden');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    if (!elements.voiceDropdown.contains(e.target)) {
+        elements.voiceDropdownMenu.classList.add('hidden');
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Settings
+// ─────────────────────────────────────────────────────────────────────────
 
 async function selectOutputFolder() {
     let folderPath;
 
     if (isElectron && window.electronAPI) {
-        // Electron: use native dialog via IPC
         folderPath = await window.electronAPI.openFolderDialog();
     } else {
-        // PyWebView: use built-in dialog
         folderPath = await callAPI('select_output_folder');
     }
 
@@ -412,11 +577,6 @@ async function selectOutputFolder() {
         state.outputPath = folderPath;
         elements.outputPath.textContent = folderPath;
     }
-}
-
-function updateSpeed(value) {
-    state.speed = parseFloat(value);
-    elements.speedValue.textContent = `${value}x`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -435,22 +595,21 @@ async function startGeneration() {
         return;
     }
 
-    const preset = elements.modelSelect.value;
-    const useClonedVoice = state.refAudioPath !== null;
+    const useCustomUpload = state.refAudioPath !== null;
 
     // Debug logging for synthesis parameters
     console.log('=== startGeneration Debug ===');
     console.log('outputPath:', state.outputPath);
+    console.log('selectedVoiceId:', state.selectedVoiceId);
     console.log('refAudioPath:', state.refAudioPath);
-    console.log('preset:', preset);
-    console.log('useClonedVoice:', useClonedVoice);
+    console.log('useCustomUpload:', useCustomUpload);
     console.log('selectedChapters count:', selectedChapters.length);
 
     const result = await callAPI(
         'start_synthesis',
         state.outputPath,
-        useClonedVoice ? state.refAudioPath : null,
-        useClonedVoice ? null : preset
+        useCustomUpload ? state.refAudioPath : null,
+        useCustomUpload ? null : state.selectedVoiceId
     );
 
     if (result && result.success) {
@@ -693,16 +852,12 @@ function setupEventListeners() {
     // Chapter preview - saved on blur
     elements.chapterPreviewText.addEventListener('blur', saveChapterPreview);
 
-    // Voice selection - when preset is changed, clear the cloned voice selection
-    elements.modelSelect.addEventListener('change', () => {
-        // User selected a preset, clear any uploaded reference audio
-        state.refAudioPath = null;
-        elements.refAudioFileName.textContent = 'No file selected';
-        elements.refAudioFileName.classList.remove('has-file');
-        document.getElementById('voiceCloneSection').classList.remove('active');
-    });
-
-    elements.chooseRefAudioBtn.addEventListener('click', selectReferenceAudio);
+    // Voice dropdown
+    elements.voiceDropdownTrigger.addEventListener('click', toggleVoiceDropdown);
+    elements.clearUploadBtn.addEventListener('click', clearCustomUpload);
+    elements.saveVoiceBtn.addEventListener('click', showSaveVoiceForm);
+    elements.saveVoiceConfirmBtn.addEventListener('click', saveVoiceAsPreset);
+    elements.saveVoiceCancelBtn.addEventListener('click', hideSaveVoiceForm);
     elements.previewVoiceBtn.addEventListener('click', previewVoice);
 
     // Removed refText listener
@@ -756,12 +911,17 @@ function init() {
             window.electronAPI.log(`API_BASE: ${window.API_BASE}`);
         }
         checkModels();
+        loadVoices();
     } else if (window.pywebview) {
         // PyWebView mode (already ready)
         checkModels();
+        loadVoices();
     } else {
         // PyWebView mode (wait for ready)
-        window.addEventListener('pywebviewready', checkModels);
+        window.addEventListener('pywebviewready', () => {
+            checkModels();
+            loadVoices();
+        });
     }
 }
 

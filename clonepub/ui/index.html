@@ -170,39 +170,46 @@
                 <div class="settings-panel">
                     <h3>GENERATION SETTINGS</h3>
 
-                    <!-- Voice Cloning Section (Hero Feature) -->
-                    <div class="form-group voice-clone-section" id="voiceCloneSection">
-                        <label><span class="label-icon">🎤</span> Clone Voice</label>
-                        <div class="clone-input-group">
-                            <div class="file-display" id="refAudioFileName">No file selected</div>
-                            <button class="btn btn-secondary btn-sm" id="chooseRefAudioBtn">Choose Audio...</button>
+                    <!-- Voice Selection (Unified) -->
+                    <div class="form-group voice-section">
+                        <label><span class="label-icon">🎤</span> Voice</label>
+
+                        <!-- Custom dropdown -->
+                        <div class="voice-dropdown" id="voiceDropdown">
+                            <button class="voice-dropdown-trigger" id="voiceDropdownTrigger" type="button">
+                                <span class="voice-dropdown-label" id="voiceDropdownLabel">Marius (Default)</span>
+                                <span class="voice-dropdown-arrow">▾</span>
+                            </button>
+                            <div class="voice-dropdown-menu hidden" id="voiceDropdownMenu">
+                                <!-- Populated by JS -->
+                            </div>
                         </div>
-                        <p class="help-text">10-30 second audio sample</p>
-                    </div>
 
-                    <!-- OR Divider -->
-                    <div class="or-divider">
-                        <span>OR</span>
-                    </div>
+                        <!-- Upload indicator (shown when custom file is selected but not yet saved) -->
+                        <div class="voice-upload-info hidden" id="voiceUploadInfo">
+                            <span class="upload-file-name" id="uploadFileName"></span>
+                            <button class="btn btn-sm btn-link" id="clearUploadBtn" type="button">✕</button>
+                        </div>
 
-                    <!-- Preset Voices Section -->
-                    <div class="form-group">
-                        <label>Voice Preset</label>
-                        <select id="modelSelect" class="form-select">
-                            <option value="marius">Marius (Default)</option>
-                            <option value="alba">Alba</option>
-                            <option value="javert">Javert</option>
-                            <option value="jean">Jean</option>
-                            <option value="fantine">Fantine</option>
-                            <option value="cosette">Cosette</option>
-                            <option value="eponine">Eponine</option>
-                            <option value="azelma">Azelma</option>
-                        </select>
-                    </div>
+                        <!-- Action buttons -->
+                        <div class="voice-actions">
+                            <button class="btn btn-accent btn-sm" id="previewVoiceBtn">
+                                <span class="btn-icon">🔊</span> Preview
+                            </button>
+                            <button class="btn btn-secondary btn-sm hidden" id="saveVoiceBtn">
+                                <span class="btn-icon">💾</span> Save as Preset
+                            </button>
+                        </div>
 
-                    <button class="btn btn-accent btn-full" id="previewVoiceBtn">
-                        <span class="btn-icon">🔊</span> Preview Voice
-                    </button>
+                        <!-- Save voice modal (inline) -->
+                        <div class="save-voice-form hidden" id="saveVoiceForm">
+                            <input type="text" class="form-input" id="saveVoiceName" placeholder="Voice name...">
+                            <div class="save-voice-actions">
+                                <button class="btn btn-primary btn-sm" id="saveVoiceConfirmBtn">Save</button>
+                                <button class="btn btn-sm" id="saveVoiceCancelBtn">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="form-group">
                         <label>Output Folder</label>
