@@ -39,6 +39,30 @@ sample_rate = 24000
 
 # Singleton for TTS model
 _tts_model_instance = None
+_best_aac_encoder = None
+
+
+def get_best_aac_encoder() -> str:
+    """Return the fastest available AAC encoder ('aac_at' on macOS, else 'aac')."""
+    global _best_aac_encoder
+    if _best_aac_encoder is not None:
+        return _best_aac_encoder
+
+    ffmpeg = get_ffmpeg_path()
+    if not ffmpeg:
+        _best_aac_encoder = "aac"
+        return _best_aac_encoder
+
+    try:
+        proc = subprocess.run([ffmpeg, "-encoders"], capture_output=True, text=True, check=True)
+        if "aac_at" in proc.stdout:
+            _best_aac_encoder = "aac_at"
+        else:
+            _best_aac_encoder = "aac"
+    except Exception:
+        _best_aac_encoder = "aac"
+
+    return _best_aac_encoder
 
 # Built-in voice presets from Pocket TTS (full catalog of 26 voices)
 BUILTIN_VOICES = [
@@ -555,7 +579,8 @@ def concat_chapters_with_ffmpeg(chapter_files, output_folder, filename):
             abs_path = Path(chapter_file).resolve()
             f.write(f"file '{abs_path}'\n")
 
-    concat_file_path = Path(output_folder) / filename.replace(".epub", ".tmp.mp4")
+    ext = Path(chapter_files[0]).suffix if chapter_files else ".m4a"
+    concat_file_path = Path(output_folder) / filename.replace(".epub", f".tmp{ext}")
     subprocess.run(
         [
             ffmpeg,
@@ -619,6 +644,17 @@ def create_m4b(
         if not ffmpeg:
             raise RuntimeError("ffmpeg not found")
 
+        # If chapter files are already AAC/M4A, stream-copy without re-encoding
+        is_aac = False
+        if chapter_files and Path(chapter_files[0]).suffix.lower() in (".m4a", ".aac"):
+            is_aac = True
+
+        audio_codec_args = (
+            ["-c:a", "copy"]
+            if is_aac
+            else ["-c:a", get_best_aac_encoder(), "-b:a", "64k"]
+        )
+
         cmd = [
             ffmpeg,
             "-y",  # Overwrite output
@@ -635,10 +671,9 @@ def create_m4b(
             [
                 "-map",
                 "0:a",  # Map audio
-                "-c:a",
-                "aac",  # Convert to AAC
-                "-b:a",
-                "64k",  # Reduce bitrate for smaller size
+            ]
+            + audio_codec_args
+            + [
                 "-map_metadata",
                 "1",  # Map metadata
                 "-f",
@@ -668,7 +703,7 @@ def create_m4b(
         return None
 
 
-def verify_audio_quality(audio_file_path, text_length):
+def verify_audio_quality(audio_file_path, text_length, audio_data=None):
     """
     Verify audio quality with simple checks:
     1. File exists and has reasonable size
@@ -690,10 +725,19 @@ def verify_audio_quality(audio_file_path, text_length):
     if file_size < 1000:  # Less than 1KB is suspicious
         issues.append(f"File size too small: {file_size} bytes")
 
-    # Check 2 & 3: Load audio and check duration + levels
+    # Check 2 & 3: Duration and loudness
     try:
-        audio_data, sr = soundfile.read(path)
-        duration = len(audio_data) / sr
+        if audio_data is not None and len(audio_data) > 0:
+            duration = len(audio_data) / sample_rate
+            rms = float(np.sqrt(np.mean(audio_data**2)))
+        else:
+            try:
+                data, sr = soundfile.read(path)
+                duration = len(data) / sr
+                rms = float(np.sqrt(np.mean(data**2)))
+            except Exception:
+                duration = probe_duration(path)
+                rms = 0.01  # Fallback for formats not supported by soundfile
 
         # Duration check
         expected_min = text_length * MIN_DURATION_PER_CHAR
@@ -709,7 +753,6 @@ def verify_audio_quality(audio_file_path, text_length):
             )
 
         # RMS (loudness) check - detect silent audio
-        rms = np.sqrt(np.mean(audio_data**2))
         if rms < MIN_RMS_THRESHOLD:
             issues.append(f"Audio appears silent: RMS={rms:.6f}")
 
@@ -869,7 +912,7 @@ def generate_audiobook(
     pipeline = PocketTTSPipeline(ref_audio=ref_audio, voice_preset=voice_preset)
 
     total_chapters = len(chapters)
-    mp3_files = []
+    chapter_files = []
 
     # Check for ffmpeg
     ffmpeg = get_ffmpeg_path()
@@ -890,6 +933,7 @@ def generate_audiobook(
         safe_name = "".join(
             c for c in chapter_name if c.isalnum() or c in (" ", "-", "_")
         ).strip()
+        m4a_path = output_path / f"{safe_name}.m4a"
         mp3_path = output_path / f"{safe_name}.mp3"
 
         def chapter_progress_callback(p):
@@ -906,29 +950,33 @@ def generate_audiobook(
         if not text.strip():
             continue
 
-        # Check if already exists
-        if mp3_path.exists():
-            mp3_files.append(mp3_path)
+        # Check if already exists (check m4a first, fallback to mp3)
+        if m4a_path.exists():
+            chapter_files.append(m4a_path)
+            continue
+        elif mp3_path.exists():
+            chapter_files.append(mp3_path)
             continue
 
         audio = pipeline.generate(text, progress_callback=chapter_progress_callback)
 
         if audio is not None:
-            # Write temp WAV then convert to MP3
-            temp_wav = mp3_path.with_suffix(".tmp.wav")
+            # Write temp WAV then convert to M4A (AAC)
+            temp_wav = m4a_path.with_suffix(".tmp.wav")
             soundfile.write(temp_wav, audio, sample_rate)
 
+            encoder = get_best_aac_encoder()
             subprocess.run(
                 [
                     ffmpeg,
                     "-y",
                     "-i",
                     str(temp_wav),
-                    "-codec:a",
-                    "libmp3lame",
-                    "-qscale:a",
-                    "2",
-                    str(mp3_path),
+                    "-c:a",
+                    encoder,
+                    "-b:a",
+                    "64k",
+                    str(m4a_path),
                 ],
                 capture_output=True,
                 check=True,
@@ -936,23 +984,23 @@ def generate_audiobook(
 
             temp_wav.unlink()
 
-            # Verify audio quality
-            is_valid, issues = verify_audio_quality(mp3_path, len(text))
+            # Verify audio quality using in-memory audio array
+            is_valid, issues = verify_audio_quality(m4a_path, len(text), audio_data=audio)
             if not is_valid:
                 print(f"Quality issues in {chapter_name}: {issues}")
                 # Treat as failure
-                if mp3_path.exists():
-                    mp3_path.unlink()
+                if m4a_path.exists():
+                    m4a_path.unlink()
                 raise RuntimeError(f"Audio verification failed: {'; '.join(issues)}")
 
-            mp3_files.append(mp3_path)
+            chapter_files.append(m4a_path)
 
-    if mp3_files and has_ffmpeg:
+    if chapter_files and has_ffmpeg:
         if progress_callback:
             progress_callback(percent=95, status="Creating M4B audiobook...")
 
         m4b_path = create_m4b(
-            mp3_files,
+            chapter_files,
             f"{book_title} - {book_author}.epub",
             cover_image,
             output_folder,
@@ -964,16 +1012,13 @@ def generate_audiobook(
             progress_callback(percent=100, status="Complete!")
 
         if m4b_path:
-            # Clean up individual MP3s if M4B was successful?
-            # Original kept them, but let's leave them for now or follow user preference.
-            # Original: "To regenerate a chapter, delete its MP3 file and run again." -> implies keeping them.
             return m4b_path
 
     # If we got here but have no files, something went wrong (e.g. empty chapters)
-    if not mp3_files:
+    if not chapter_files:
         raise RuntimeError("No audio files were generated (empty text or errors).")
 
     if progress_callback:
-        progress_callback(percent=100, status="Complete (MP3s only)!")
+        progress_callback(percent=100, status="Complete (Chapters only)!")
 
-    return mp3_files
+    return chapter_files
