@@ -1,5 +1,7 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerDMG } from '@electron-forge/maker-dmg';
+import * as path from 'path';
+import { execSync } from 'child_process';
 
 const config: ForgeConfig = {
     packagerConfig: {
@@ -26,11 +28,19 @@ const config: ForgeConfig = {
         ignore: [
             /^\/src/,
             /^\/\.git/,
+            /^\/testing/,
             /\.ts$/,
             /tsconfig\.json$/
         ]
     },
     rebuildConfig: {},
+    hooks: {
+        postPackage: async (forgeConfig, options) => {
+            const appPath = path.join(options.outputPaths[0], 'ClonEpub.app');
+            console.log(`Ad-hoc signing ${appPath}...`);
+            execSync(`codesign --force --deep -s - "${appPath}"`);
+        }
+    },
     makers: [
         new MakerDMG({
             name: 'ClonEpub',

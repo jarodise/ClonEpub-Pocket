@@ -1,6 +1,6 @@
 [project]
 name = "clonepub"
-version = "1.1.0"
+version = "1.2.0"
 description = "Convert EPUB e-books to audiobooks with voice cloning - Apple Silicon optimized"
 authors = [
     { name = "Your Name", email = "your.email@example.com" }
@@ -11,7 +11,7 @@ dependencies = [
     "soundfile>=0.13.1",
     "bs4>=0.0.2",
     "spacy>=3.8.3",
-    "pocket-tts>=1.1.1",
+    "pocket-tts>=3.1.0",
     "pywebview>=5.0",
     "lxml>=5.0.0",
     "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",

@@ -8,7 +8,7 @@ Convert EPUB e-books to high-quality audiobooks with voice cloning. A standalone
 
 - 📖 **EPUB to Audiobook** — Load any EPUB file and convert it to a high-quality audiobook
 - 🎤 **Voice Cloning** — Clone any voice from a 10-30 second audio sample
-- 🔊 **Built-in Voice Presets** — 8 ready-to-use voices with different styles
+- 🔊 **Built-in Voice Presets** — 26 ready-to-use voices with different styles
 - 💾 **Save Custom Voices** — Save cloned voices as reusable presets for future use
 - 💻 **CPU-Only** — Runs efficiently on any modern CPU, no GPU required
 - ⚡ **Fast Generation** — ~6x real-time speed on Apple Silicon, ~200ms latency for first chunk
@@ -91,7 +91,7 @@ This creates a `.dmg` file in `electron/out/make/`.
 
 ClonEpub supports three voice sources:
 
-- **Built-in Presets** — 8 ready-to-use voices (see table below)
+- **Built-in Presets** — 26 ready-to-use voices (see table below)
 - **Saved Custom Voices** — Your own cloned voices, saved as reusable presets
 - **Upload Audio** — One-off voice cloning from any audio sample
 
@@ -108,16 +108,21 @@ For best results with custom voice cloning:
 
 ### Built-in Voice Presets
 
-| Voice | Description |
-|-------|-------------|
-| Marius (Default) | Male, neutral tone |
-| Alba | Female, warm and expressive |
+| Voice | Category / Description |
+|-------|------------------------|
+| Alba (Default) | Female, warm and expressive |
+| Marius | Male, neutral tone |
 | Javert | Male, authoritative |
 | Jean | Male, soft spoken |
 | Fantine | Female, gentle |
 | Cosette | Female, bright |
 | Eponine | Female, dramatic |
 | Azelma | Female, youthful |
+| Anna, Vera, Charles, Paul, George | English character voices |
+| Mary, Jane, Michael, Eve | English narrator voices |
+| Bill Boerst, Peter Yearsley, Stuart Bell, Caro Davy | Classic LibriVox-style narrator voices |
+| Estelle (French), Juergen (German) | International presets |
+| Giovanni (Italian), Lola (Spanish), Rafael (Portuguese) | International presets |
 
 ## 🔧 Technical Details
 
@@ -155,7 +160,7 @@ Follow these steps to fix it:
 4. **Accept the model license** — visit [kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts) while logged in to your HuggingFace account and click **"Agree and access repository"**
 5. **Restart the app** — the voice cloning weights will download automatically
 
-> **Note**: If you don't need voice cloning, you can skip this entirely and use the 8 built-in voice presets (`alba`, `marius`, `javert`, `jean`, `fantine`, `cosette`, `eponine`, `azelma`).
+> **Note**: If you don't need voice cloning, you can skip this entirely and use the 26 built-in voice presets.
 
 ## ⚠️ Prohibited Use
 

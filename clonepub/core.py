@@ -40,28 +40,48 @@ sample_rate = 24000
 # Singleton for TTS model
 _tts_model_instance = None
 
-# Built-in voice presets from Pocket TTS
+# Built-in voice presets from Pocket TTS (full catalog of 26 voices)
 BUILTIN_VOICES = [
-    {"id": "marius",  "name": "Marius (Default)", "type": "builtin"},
-    {"id": "alba",    "name": "Alba",             "type": "builtin"},
-    {"id": "javert",  "name": "Javert",           "type": "builtin"},
-    {"id": "jean",    "name": "Jean",             "type": "builtin"},
-    {"id": "fantine", "name": "Fantine",          "type": "builtin"},
-    {"id": "cosette", "name": "Cosette",          "type": "builtin"},
-    {"id": "eponine", "name": "Eponine",          "type": "builtin"},
-    {"id": "azelma",  "name": "Azelma",           "type": "builtin"},
+    # English voices (Default: Alba)
+    {"id": "alba",           "name": "Alba (Default)",      "type": "builtin"},
+    {"id": "marius",         "name": "Marius",              "type": "builtin"},
+    {"id": "javert",         "name": "Javert",              "type": "builtin"},
+    {"id": "jean",           "name": "Jean",                "type": "builtin"},
+    {"id": "fantine",        "name": "Fantine",             "type": "builtin"},
+    {"id": "cosette",        "name": "Cosette",             "type": "builtin"},
+    {"id": "eponine",        "name": "Eponine",             "type": "builtin"},
+    {"id": "azelma",         "name": "Azelma",              "type": "builtin"},
+    {"id": "anna",           "name": "Anna",                "type": "builtin"},
+    {"id": "vera",           "name": "Vera",                "type": "builtin"},
+    {"id": "charles",        "name": "Charles",             "type": "builtin"},
+    {"id": "paul",           "name": "Paul",                "type": "builtin"},
+    {"id": "george",         "name": "George",              "type": "builtin"},
+    {"id": "mary",           "name": "Mary",                "type": "builtin"},
+    {"id": "jane",           "name": "Jane",                "type": "builtin"},
+    {"id": "michael",        "name": "Michael",             "type": "builtin"},
+    {"id": "eve",            "name": "Eve",                 "type": "builtin"},
+    {"id": "bill_boerst",    "name": "Bill Boerst",         "type": "builtin"},
+    {"id": "peter_yearsley", "name": "Peter Yearsley",      "type": "builtin"},
+    {"id": "stuart_bell",    "name": "Stuart Bell",         "type": "builtin"},
+    {"id": "caro_davy",      "name": "Caro Davy",           "type": "builtin"},
+    # International voices
+    {"id": "giovanni",       "name": "Giovanni (Italian)",  "type": "builtin"},
+    {"id": "lola",           "name": "Lola (Spanish)",      "type": "builtin"},
+    {"id": "juergen",        "name": "Juergen (German)",    "type": "builtin"},
+    {"id": "rafael",         "name": "Rafael (Portuguese)", "type": "builtin"},
+    {"id": "estelle",        "name": "Estelle (French)",    "type": "builtin"},
 ]
 
 
-def get_tts_model():
+def get_tts_model(quantize: bool = True):
     global _tts_model_instance
     if _tts_model_instance is None:
         if TTSModel is None:
             raise ImportError("pocket-tts not found. Please install it.")
-        print("Loading Pocket TTS model...")
+        print(f"Loading Pocket TTS model (quantize={quantize})...")
         try:
             # Use load_model factory method which handles config and weights
-            _tts_model_instance = TTSModel.load_model()
+            _tts_model_instance = TTSModel.load_model(quantize=quantize)
         except Exception as e:
             print(f"Failed to load Pocket TTS model: {e}")
             raise
@@ -199,9 +219,53 @@ def resolve_voice_preset(voice_preset):
         if safetensors_path.exists():
             return str(safetensors_path)
         else:
-            print(f"Warning: Custom voice '{voice_id}' not found, falling back to 'marius'")
-            return "marius"
+            print(f"Warning: Custom voice '{voice_id}' not found, falling back to 'alba'")
+            return "alba"
     return voice_preset
+
+
+def load_voice_state(model, voice_target):
+    """Load model state for a voice target (built-in name or .safetensors path).
+
+    If loading a .safetensors file fails (e.g. due to model architecture or dimension
+    changes across Pocket TTS versions), attempts automatic recovery by re-extracting
+    the voice state from the source audio file saved in the accompanying .json metadata.
+
+    Args:
+        model: Loaded TTSModel instance.
+        voice_target: Built-in voice name string or Path/string to a .safetensors file.
+
+    Returns:
+        Model state dict ready for generation.
+    """
+    target_str = str(voice_target)
+    if target_str.endswith(".safetensors"):
+        path = Path(voice_target)
+        try:
+            return model.get_state_for_audio_prompt(target_str)
+        except Exception as e:
+            print(f"Warning: Failed to load voice state from {path.name}: {e}")
+            # Check for matching .json metadata to auto-recover
+            json_path = path.with_suffix(".json")
+            if json_path.exists():
+                try:
+                    with open(json_path, "r") as f:
+                        meta = json.load(f)
+                    source_audio = meta.get("source_audio")
+                    if source_audio and Path(source_audio).exists():
+                        print(f"Auto-migrating legacy voice '{path.stem}' from source audio...")
+                        compat_path = ensure_compatible_audio(source_audio)
+                        if compat_path:
+                            new_state = model.get_state_for_audio_prompt(compat_path)
+                            if export_model_state:
+                                export_model_state(new_state, str(path))
+                                print(f"Successfully migrated voice '{path.stem}' to new model format.")
+                            return new_state
+                except Exception as recovery_err:
+                    print(f"Voice auto-recovery failed for {path.stem}: {recovery_err}")
+            raise
+    else:
+        return model.get_state_for_audio_prompt(voice_target)
 
 
 def ensure_compatible_audio(file_path):
@@ -253,10 +317,10 @@ def ensure_compatible_audio(file_path):
             capture_output=True,
         )
         return str(compatible_path)
-    except subprocess.CalledProcessError as e:
-        print(f"Conversion failed: {e}")
-        # Failure to convert reference audio is critical for cloning
-        return None
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Conversion failed ({e}), falling back to original file for native Pocket TTS decoding.")
+        # Pocket TTS 3.x natively decodes MP3/WAV/FLAC and resamples to 24kHz
+        return str(path)
 
 
 class PocketTTSPipeline:
@@ -266,13 +330,13 @@ class PocketTTSPipeline:
     SENTENCE_PAUSE_DURATION = 0.5  # 500ms pause between sentences
     PARAGRAPH_PAUSE_DURATION = 0.9  # 900ms pause between paragraphs
 
-    def __init__(self, ref_audio=None, voice_preset=None):
+    def __init__(self, ref_audio=None, voice_preset=None, quantize=True):
         self.ref_audio = ensure_compatible_audio(ref_audio) if ref_audio else None
         self.voice_preset = voice_preset
         self._nlp = None
         self._cached_model_state = None
         # Pre-load model
-        self.model = get_tts_model()
+        self.model = get_tts_model(quantize=quantize)
 
     def _clean_text_for_tts(self, text):
         """Clean text for TTS by removing quotation marks and normalizing ALL CAPS."""
@@ -321,15 +385,15 @@ class PocketTTSPipeline:
                     # Resolve custom: prefix to .safetensors path
                     resolved = resolve_voice_preset(self.voice_preset)
                     try:
-                        self._cached_model_state = self.model.get_state_for_audio_prompt(resolved)
+                        self._cached_model_state = load_voice_state(self.model, resolved)
                     except Exception as e:
                         print(
-                            f"Warning: Preset '{resolved}' failed ({e}). Falling back to 'marius'."
+                            f"Warning: Preset '{resolved}' failed ({e}). Falling back to 'alba'."
                         )
-                        self._cached_model_state = self.model.get_state_for_audio_prompt("marius")
+                        self._cached_model_state = self.model.get_state_for_audio_prompt("alba")
                 else:
                     # Default fallback
-                    self._cached_model_state = self.model.get_state_for_audio_prompt("marius")
+                    self._cached_model_state = self.model.get_state_for_audio_prompt("alba")
 
             audio = self.model.generate_audio(
                 model_state=self._cached_model_state,

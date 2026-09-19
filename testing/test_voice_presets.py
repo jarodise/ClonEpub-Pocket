@@ -42,8 +42,8 @@ class TestBuiltinVoices(unittest.TestCase):
     """Test the built-in voice list constant."""
 
     def test_builtin_voices_count(self):
-        """Should have exactly 8 built-in voices."""
-        self.assertEqual(len(BUILTIN_VOICES), 8)
+        """Should have exactly 26 built-in voices."""
+        self.assertEqual(len(BUILTIN_VOICES), 26)
 
     def test_builtin_voices_structure(self):
         """Each voice should have id, name, and type='builtin'."""
@@ -55,8 +55,18 @@ class TestBuiltinVoices(unittest.TestCase):
     def test_builtin_voice_ids(self):
         """Should contain all expected voice IDs."""
         ids = {v["id"] for v in BUILTIN_VOICES}
-        expected = {"marius", "alba", "javert", "jean", "fantine", "cosette", "eponine", "azelma"}
+        expected = {
+            "alba", "marius", "javert", "jean", "fantine", "cosette", "eponine", "azelma",
+            "anna", "vera", "charles", "paul", "george", "mary", "jane", "michael", "eve",
+            "bill_boerst", "peter_yearsley", "stuart_bell", "caro_davy",
+            "giovanni", "lola", "juergen", "rafael", "estelle",
+        }
         self.assertEqual(ids, expected)
+
+    def test_default_voice_is_alba(self):
+        """First built-in voice should be Alba as default."""
+        self.assertEqual(BUILTIN_VOICES[0]["id"], "alba")
+        self.assertIn("Default", BUILTIN_VOICES[0]["name"])
 
 
 class TestVoiceDirectory(unittest.TestCase):
@@ -82,7 +92,7 @@ class TestListVoices(unittest.TestCase):
             mock_app_dir.return_value = Path(tmpdir)
             voices = list_voices()
             # All voices should be built-in
-            self.assertEqual(len(voices), 8)
+            self.assertEqual(len(voices), 26)
             self.assertTrue(all(v["type"] == "builtin" for v in voices))
 
     @patch("clonepub.core.get_app_support_dir")
@@ -100,7 +110,7 @@ class TestListVoices(unittest.TestCase):
             )
 
             voices = list_voices()
-            self.assertEqual(len(voices), 9)  # 1 custom + 8 builtin
+            self.assertEqual(len(voices), len(BUILTIN_VOICES) + 1)  # 1 custom + builtin
 
             # Custom voice should be first
             self.assertEqual(voices[0]["type"], "custom")
@@ -124,7 +134,7 @@ class TestListVoices(unittest.TestCase):
             )
 
             voices = list_voices()
-            self.assertEqual(len(voices), 8)  # Only built-in
+            self.assertEqual(len(voices), len(BUILTIN_VOICES))  # Only built-in
 
     @patch("clonepub.core.get_app_support_dir")
     def test_list_voices_ignores_bad_json(self, mock_app_dir):
@@ -138,7 +148,7 @@ class TestListVoices(unittest.TestCase):
             (voices_dir / "bad.json").write_text("not valid json!!!")
 
             voices = list_voices()
-            self.assertEqual(len(voices), 8)  # Only built-in, bad entry skipped
+            self.assertEqual(len(voices), len(BUILTIN_VOICES))  # Only built-in, bad entry skipped
 
 
 class TestSaveCustomVoice(unittest.TestCase):
@@ -307,11 +317,72 @@ class TestResolveVoicePreset(unittest.TestCase):
 
     @patch("clonepub.core.get_app_support_dir")
     def test_resolve_custom_missing_fallback(self, mock_app_dir):
-        """Missing custom voice should fall back to 'marius'."""
+        """Missing custom voice should fall back to 'alba'."""
         with tempfile.TemporaryDirectory() as tmpdir:
             mock_app_dir.return_value = Path(tmpdir)
             result = resolve_voice_preset("custom:nonexistent")
-            self.assertEqual(result, "marius")
+            self.assertEqual(result, "alba")
+
+
+class TestLoadVoiceState(unittest.TestCase):
+    """Test voice state loading and auto-recovery for legacy presets."""
+
+    def test_load_voice_state_builtin(self):
+        """Built-in voice loads directly from model."""
+        from clonepub.core import load_voice_state
+        mock_model = MagicMock()
+        mock_state = MagicMock()
+        mock_model.get_state_for_audio_prompt.return_value = mock_state
+
+        state = load_voice_state(mock_model, "alba")
+        mock_model.get_state_for_audio_prompt.assert_called_with("alba")
+        self.assertEqual(state, mock_state)
+
+    def test_load_voice_state_safetensors_success(self):
+        """Valid .safetensors loads directly."""
+        from clonepub.core import load_voice_state
+        mock_model = MagicMock()
+        mock_state = MagicMock()
+        mock_model.get_state_for_audio_prompt.return_value = mock_state
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            safetensors_path = Path(tmpdir) / "voice.safetensors"
+            safetensors_path.write_bytes(b"data")
+
+            state = load_voice_state(mock_model, str(safetensors_path))
+            mock_model.get_state_for_audio_prompt.assert_called_with(str(safetensors_path))
+            self.assertEqual(state, mock_state)
+
+    @patch("clonepub.core.ensure_compatible_audio")
+    def test_load_voice_state_safetensors_recovery(self, mock_compat):
+        """If .safetensors fails (e.g. legacy model mismatch), auto-regenerate from source_audio."""
+        from clonepub.core import load_voice_state
+        mock_model = MagicMock()
+        recovered_state = MagicMock()
+
+        # Fail on loading safetensors, succeed on loading source audio
+        def side_effect(arg):
+            if str(arg).endswith(".safetensors"):
+                raise RuntimeError("Tensor shape mismatch from legacy model")
+            return recovered_state
+
+        mock_model.get_state_for_audio_prompt.side_effect = side_effect
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_wav = Path(tmpdir) / "source.wav"
+            source_wav.write_bytes(b"wavdata")
+            mock_compat.return_value = str(source_wav)
+
+            safetensors_path = Path(tmpdir) / "legacy_voice.safetensors"
+            safetensors_path.write_bytes(b"old_data")
+            json_path = Path(tmpdir) / "legacy_voice.json"
+            json_path.write_text(json.dumps({"name": "Legacy Voice", "source_audio": str(source_wav)}))
+
+            with patch("clonepub.core.export_model_state") as mock_export:
+                state = load_voice_state(mock_model, str(safetensors_path))
+
+                self.assertEqual(state, recovered_state)
+                mock_export.assert_called_with(recovered_state, str(safetensors_path))
 
 
 if __name__ == "__main__":
