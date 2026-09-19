@@ -21,11 +21,20 @@ class ModelInfo:
     name: str
     size_mb: int
     type: str  # "tts_main", "tts_dependency", "nlp"
+    allow_patterns: Optional[List[str]] = None
+    revision: Optional[str] = None
 
 
 # Registry of all required models
 REQUIRED_MODELS: List[ModelInfo] = [
-    ModelInfo(id="kyutai/pocket-tts", name="Pocket TTS", size_mb=240, type="tts_main"),
+    ModelInfo(
+        id="kyutai/pocket-tts",
+        name="Pocket TTS",
+        size_mb=240,
+        type="tts_main",
+        allow_patterns=["languages/english/*"],
+        revision="39592ff23c9ef80098bb74895d104c26275fe2c9",
+    ),
 ]
 
 SPACY_MODEL = ModelInfo(
@@ -218,6 +227,8 @@ def download_huggingface_model(
     model_id: str,
     progress_callback: Optional[Callable[[int, int], None]] = None,
     token: Optional[str] = None,
+    allow_patterns: Optional[List[str]] = None,
+    revision: Optional[str] = None,
 ) -> bool:
     """
     Download a model from HuggingFace Hub.
@@ -226,17 +237,28 @@ def download_huggingface_model(
         model_id: The model ID
         progress_callback: Optional callback
         token: Optional auth token. If None, tries baked-in HF_TOKEN.
+        allow_patterns: Optional list of file/glob patterns to download.
+        revision: Optional git revision / commit hash / tag to download.
     """
     try:
-        from huggingface_hub import snapshot_download
+        from huggingface_hub import snapshot_download, login
 
         # Use baked-in token if no custom token provided
         use_token = token if token else HF_TOKEN
 
-        # Download the model
+        # Persist token to cache if provided so future sessions/downloads find it
+        if use_token:
+            try:
+                login(token=use_token, add_to_git_credential=False)
+            except Exception as login_err:
+                print(f"Warning: Could not persist token via huggingface_hub.login: {login_err}")
+
+        # Download the model (filtered to required patterns if specified)
         snapshot_download(
             repo_id=model_id,
+            revision=revision,
             token=use_token,
+            allow_patterns=allow_patterns,
             # HuggingFace Hub handles progress internally
         )
         return True
@@ -279,7 +301,11 @@ def download_all_models(
             progress_callback(model.name, i + 1, total_models)
 
         if not check_model_installed(model.id):
-            results[model.id] = download_huggingface_model(model.id)
+            results[model.id] = download_huggingface_model(
+                model.id,
+                allow_patterns=model.allow_patterns,
+                revision=getattr(model, "revision", None),
+            )
         else:
             results[model.id] = True  # Already installed
 

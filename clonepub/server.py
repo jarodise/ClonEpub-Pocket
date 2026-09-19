@@ -49,7 +49,9 @@ def get_dependencies():
 @app.route("/api/start_download", methods=["POST"])
 def start_download():
     """Start downloading all missing models in background."""
-    return jsonify(api.start_model_download())
+    data = request.get_json(silent=True) or {}
+    token = data.get("token")
+    return jsonify(api.start_model_download(token=token))
 
 
 @app.route("/api/download_progress", methods=["GET"])

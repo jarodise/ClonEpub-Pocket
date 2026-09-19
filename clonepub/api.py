@@ -88,7 +88,12 @@ class ClonEpubAPI:
                     }
                     if not check_model_installed(model.id):
                         # Pass token if provided (overrides baked-in)
-                        download_huggingface_model(model.id, token=token)
+                        download_huggingface_model(
+                            model.id,
+                            token=token,
+                            allow_patterns=getattr(model, "allow_patterns", None),
+                            revision=getattr(model, "revision", None),
+                        )
 
                 # Download spaCy model (only if not installed)
                 self._download_progress = {
@@ -108,9 +113,14 @@ class ClonEpubAPI:
                 # Clean up error message for user display
                 error_msg = str(e)
                 if "401" in error_msg or "403" in error_msg:
-                    error_msg = (
-                        "Access Denied (403). Please provide a HuggingFace Token."
-                    )
+                    if token:
+                        error_msg = (
+                            "Access Denied (403). The provided HuggingFace token was rejected or lacks permission to access kyutai/pocket-tts. Please ensure your token has read access and your HuggingFace account has accepted the license at https://huggingface.co/kyutai/pocket-tts."
+                        )
+                    else:
+                        error_msg = (
+                            "Access Denied (403). Please provide a HuggingFace Token."
+                        )
                 self._download_progress["error"] = error_msg
 
         self._download_thread = threading.Thread(target=run_download, daemon=True)

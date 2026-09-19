@@ -88,7 +88,7 @@ BUILTIN_VOICES = [
     {"id": "peter_yearsley", "name": "Peter Yearsley",      "type": "builtin"},
     {"id": "stuart_bell",    "name": "Stuart Bell",         "type": "builtin"},
     {"id": "caro_davy",      "name": "Caro Davy",           "type": "builtin"},
-    # International voices
+    # English voices with accents
     {"id": "giovanni",       "name": "Giovanni (Italian)",  "type": "builtin"},
     {"id": "lola",           "name": "Lola (Spanish)",      "type": "builtin"},
     {"id": "juergen",        "name": "Juergen (German)",    "type": "builtin"},

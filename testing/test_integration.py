@@ -92,5 +92,32 @@ class TestDependencies(unittest.TestCase):
                 self.fail(f"Found dynamic dependency on local system: {line.strip()}")
 
 
+class TestServerDownload(unittest.TestCase):
+    def test_start_download_endpoint_passes_token(self):
+        """Test that /api/start_download passes token to api.start_model_download."""
+        from clonepub import server
+        from unittest.mock import patch
+
+        client = server.app.test_client()
+
+        with patch.object(server.api, "start_model_download") as mock_start:
+            mock_start.return_value = {"success": True}
+
+            # Test with token
+            response = client.post(
+                "/api/start_download",
+                json={"token": "hf_dummy_12345"},
+            )
+            self.assertEqual(response.status_code, 200)
+            mock_start.assert_called_with(token="hf_dummy_12345")
+
+            # Test without token
+            mock_start.reset_mock()
+            response = client.post("/api/start_download", json={})
+            self.assertEqual(response.status_code, 200)
+            mock_start.assert_called_with(token=None)
+
+
 if __name__ == "__main__":
     unittest.main()
+
