@@ -31,6 +31,9 @@ const uvPath = isDev
     ? 'uv'  // Assume uv is in PATH for development
     : path.join(resourcesPath, 'uv');
 
+// Set app name explicitly so userData and system identity match ClonEpub
+app.setName('ClonEpub');
+
 // User data directory: ~/Library/Application Support/ClonEpub
 const userDataPath = app.getPath('userData');
 const venvPath = path.join(userDataPath, '.venv');

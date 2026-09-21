@@ -14,3 +14,11 @@
   - Bumped version to `1.2.0` in `pyproject.toml` and `electron/package.json` to trigger automatic `uv sync` on upgrade.
   - Added ad-hoc code signing hook in `forge.config.ts`.
   - Built `electron/out/make/ClonEpub.dmg` (171MB). Mounted and verified app signature and bundled dependencies.
+- **2026-09-21 08:26**: Release v1.2.2 bundled and verified:
+  - Fixed EPUB chapter extraction for div-based layouts (`extract_text_from_soup`).
+  - Added actual chapter title resolution (`extract_toc_map`, `extract_chapter_title`).
+  - Added intelligent auto-selection of content chapters and exclusion of front/back matter (`is_likely_chapter`).
+  - Added chapter titles to M4B metadata chapter markers (`create_index_file`).
+  - Bumped version to `1.2.2` in `pyproject.toml`, `electron/package.json`, and `uv.lock`.
+  - Added explicit `app.setName('ClonEpub')` in `electron/src/main.ts`.
+  - Built `electron/out/make/ClonEpub.dmg` (170MB). Verified `ClonEpub.app`, ad-hoc codesigning, and bundle ID `com.jarodise.clonepub`.

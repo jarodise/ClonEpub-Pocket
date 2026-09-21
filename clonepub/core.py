@@ -19,6 +19,7 @@ import subprocess
 import re
 from pathlib import Path
 from string import Formatter
+from urllib.parse import unquote
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from clonepub.models import get_ffmpeg_path, get_ffprobe_path
@@ -548,20 +549,25 @@ def probe_duration(file_name):
         return 0.0
 
 
-def create_index_file(title, creator, chapter_mp3_files, output_folder):
+def create_index_file(
+    title, creator, chapter_mp3_files, output_folder, chapter_titles=None
+):
     """Create FFMETADATA1 chapters file."""
     output_file = Path(output_folder) / "chapters.txt"
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(f";FFMETADATA1\ntitle={title}\nartist={creator}\n\n")
         start = 0
-        i = 0
-        for c in chapter_mp3_files:
+        for i, c in enumerate(chapter_mp3_files):
             duration = probe_duration(c)
             end = start + (int)(duration * 1000)
-            f.write(
-                f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle=Chapter {i + 1}\n\n"
+            ch_title = (
+                chapter_titles[i]
+                if chapter_titles and i < len(chapter_titles)
+                else f"Chapter {i + 1}"
             )
-            i += 1
+            f.write(
+                f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={ch_title}\n\n"
+            )
             start = end
     return output_file
 
@@ -608,13 +614,18 @@ def create_m4b(
     output_folder,
     title="Audiobook",
     author="Unknown",
+    chapter_titles=None,
 ):
     """Create final M4B audiobook file with metadata and cover."""
     print("Creating M4B file...")
     try:
         # Create chapters metadata
         chapters_txt_path = create_index_file(
-            title, author, chapter_files, output_folder
+            title,
+            author,
+            chapter_files,
+            output_folder,
+            chapter_titles=chapter_titles,
         )
 
         # Concatenate audio
@@ -784,76 +795,238 @@ def load_epub(file_path):
     }
 
 
+BLOCK_TAGS = {
+    "p",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "blockquote",
+    "section",
+    "article",
+    "dd",
+    "dt",
+}
+
+EXCLUDED_TITLES_PATTERN = re.compile(
+    r"^(?:cover|title\s*page|halftitle|half-title|copyright|dedication|epigraph|contents|table\s*of\s*contents|"
+    r"acknowledgments?|acknowledgements?|notes?|endnotes?|footnotes?|bibliography|index|colophon|"
+    r"also\s*by|praise|about\s*the\s*author)\b",
+    re.I,
+)
+
+EXCLUDED_FILENAMES_PATTERN = re.compile(
+    r"^(?:cover|title|copyright|dedication|fm|contents?|ack|notes?|bib|index)$",
+    re.I,
+)
+
+
+def extract_toc_map(book):
+    """Extract a mapping of file hrefs/names to chapter titles from book TOC."""
+    toc_map = {}
+
+    def process_item(item):
+        if isinstance(item, (list, tuple)):
+            if len(item) > 0:
+                header = item[0]
+                if hasattr(header, "href") and hasattr(header, "title") and header.href:
+                    add_entry(header.href, header.title)
+            if len(item) > 1 and isinstance(item[1], (list, tuple)):
+                for sub in item[1]:
+                    process_item(sub)
+        elif hasattr(item, "href") and hasattr(item, "title"):
+            add_entry(item.href, item.title)
+
+    def add_entry(href, title):
+        if not href or not title:
+            return
+        title = title.strip()
+        clean_href = unquote(href).split("#")[0].replace("\\", "/").strip()
+        if clean_href and clean_href not in toc_map:
+            toc_map[clean_href] = title
+        base = Path(clean_href).name
+        if base and base not in toc_map:
+            toc_map[base] = title
+
+    if book.toc:
+        for item in book.toc:
+            process_item(item)
+    return toc_map
+
+
+def extract_chapter_title(item, soup, toc_map, book_title=""):
+    """Extract chapter title using TOC, HTML headings, classes, or cleaned filename."""
+    item_name = item.get_name()
+    base_name = Path(item_name).name
+
+    # 1. Official Table of Contents
+    if item_name in toc_map:
+        return toc_map[item_name]
+    if base_name in toc_map:
+        return toc_map[base_name]
+
+    # 2. In-document headings (h1, h2, h3)
+    for h in soup.find_all(["h1", "h2", "h3"]):
+        htext = h.get_text().strip()
+        if htext and htext.lower() != book_title.lower() and len(htext) < 120:
+            return htext
+
+    # 3. Chapter title classes in HTML
+    title_classes = re.compile(
+        r"chaptitle|chapter-title|chapter_title|chaptertitle", re.I
+    )
+    title_elem = soup.find(class_=title_classes)
+    if title_elem:
+        ttext = title_elem.get_text().strip()
+        if ttext and len(ttext) < 120:
+            return ttext
+
+    # 4. HTML <title> tag in <head>
+    title_tag = soup.find("title")
+    if title_tag:
+        ttype = title_tag.get_text().strip()
+        if ttype and ttype.lower() != book_title.lower() and len(ttype) < 120:
+            return ttype
+
+    # 5. Clean filename stem
+    stem = Path(item_name).stem
+    m = re.match(r"^(?:ch|chap|chapter)[-_]?(\d+)$", stem, re.I)
+    if m:
+        return f"Chapter {int(m.group(1))}"
+    m = re.match(r"^(?:part)[-_]?(\d+)$", stem, re.I)
+    if m:
+        return f"Part {int(m.group(1))}"
+    return stem.replace("_", " ").replace("-", " ").title()
+
+
+def extract_text_from_soup(soup):
+    """Extract clean, punctuated text from HTML soup."""
+    # Decompose script, style, and metadata tags
+    for tag in soup.find_all(["script", "style", "noscript", "meta", "link"]):
+        tag.decompose()
+
+    # Remove footnote references and citations
+    for a in soup.find_all(
+        "a", class_=re.compile(r"note|footnote|endnote|enref", re.I)
+    ):
+        a.decompose()
+    for a in soup.find_all("a"):
+        if re.match(r"^\s*\[?\s*\d+\s*\]?\s*$", a.get_text()):
+            a.decompose()
+    for sup in soup.find_all("sup"):
+        if re.match(r"^\s*\[?\s*\d+\s*\]?\s*$", sup.get_text()):
+            sup.decompose()
+
+    body = soup.find("body") or soup
+    blocks = []
+
+    # Find leaf block elements (block elements that contain no other block elements)
+    for tag in body.find_all(BLOCK_TAGS):
+        if not tag.find(BLOCK_TAGS):
+            text = tag.get_text().strip()
+            # Clean bracketed citations like [1]
+            text = re.sub(r"\[\s*\d+\s*\]", "", text).strip()
+            if text:
+                blocks.append(text)
+
+    # Fallback if no block tags found: get text directly from body
+    if not blocks:
+        raw = body.get_text(separator="\n").strip()
+        blocks = [line.strip() for line in raw.split("\n") if line.strip()]
+
+    # Format text into lines with proper sentence-ending punctuation for TTS pacing
+    result = []
+    for b in blocks:
+        if b and not b.endswith((".", "!", "?", ":", ";", '"', "'", "”", "’", "—")):
+            b += "."
+        result.append(b)
+
+    return "\n".join(result)
+
+
+def is_likely_chapter(title, text, filename="", total_chapters=None):
+    """Determine if this is likely a main chapter (for auto-selection)."""
+    # If the entire book has only 1 chapter, it must be selected
+    if total_chapters == 1:
+        return True
+
+    title_clean = title.strip().lower()
+    file_clean = Path(filename).stem.lower()
+
+    # Minimum readable length
+    if len(text.strip()) < 200:
+        return False
+
+    # Check against known front/back matter title patterns
+    if EXCLUDED_TITLES_PATTERN.search(title_clean):
+        return False
+
+    # If filename is clearly front/back matter and title isn't a narrative chapter
+    if EXCLUDED_FILENAMES_PATTERN.search(file_clean):
+        if not re.search(
+            r"\b(chapter|part|prologue|epilogue|introduction|foreword|preface|interlude)\b|\d+",
+            title_clean,
+        ):
+            return False
+
+    return True
+
+
 def extract_chapters(book):
-    """Extract chapters with text content from EPUB."""
-    chapters = []
+    """Extract chapters with text content and titles from EPUB."""
+    toc_map = extract_toc_map(book)
 
-    for i, item in enumerate(book.get_items()):
-        if item.get_type() != ebooklib.ITEM_DOCUMENT:
-            continue
+    meta_title = book.get_metadata("DC", "title")
+    book_title = meta_title[0][0] if meta_title else ""
 
+    # Follow reading order from book spine if available
+    spine_items = []
+    if book.spine:
+        for s in book.spine:
+            item_id = s[0] if isinstance(s, (list, tuple)) else s
+            item = book.get_item_with_id(item_id)
+            if item and item.get_type() == ebooklib.ITEM_DOCUMENT:
+                spine_items.append(item)
+
+    if not spine_items:
+        spine_items = [
+            item
+            for item in book.get_items()
+            if item.get_type() == ebooklib.ITEM_DOCUMENT
+        ]
+
+    raw_chapters = []
+    for item in spine_items:
         xml = item.get_body_content()
         soup = BeautifulSoup(xml, features="lxml")
+        text = extract_text_from_soup(soup)
 
-        # Remove footnote references
-        for a in soup.find_all(
-            "a", class_=re.compile(r"note|footnote|endnote|enref", re.I)
-        ):
-            a.decompose()
-        for a in soup.find_all("a"):
-            # Check for bracketed numbers like [1], [ 1 ], 1, etc.
-            if re.match(r"^\s*\[?\s*\d+\s*\]?\s*$", a.get_text()):
-                a.decompose()
+        # Only include documents with readable text
+        if len(text) > 50:
+            title = extract_chapter_title(item, soup, toc_map, book_title)
+            raw_chapters.append((item, title, text))
 
-        # Also remove superscript numbers that might be citations but not links
-        for sup in soup.find_all("sup"):
-            if re.match(r"^\s*\[?\s*\d+\s*\]?\s*$", sup.get_text()):
-                sup.decompose()
-
-        # Extract text from content tags
-        text = ""
-        for tag in soup.find_all(["title", "p", "h1", "h2", "h3", "h4", "li"]):
-            if tag.text:
-                tag_text = tag.text.strip()
-
-                # Fallback: remove bracketed numbers from text even if they weren't links
-                # Matches [1], [15], etc.
-                tag_text = re.sub(r"\[\s*\d+\s*\]", "", tag_text)
-
-                if not tag_text.endswith("."):
-                    tag_text += "."
-                text += tag_text + "\n"
-
-        if len(text) > 100:  # Only include substantial chapters
-            name = (
-                item.get_name()
-                .replace(".xhtml", "")
-                .replace("xhtml/", "")
-                .replace(".html", "")
-            )
-            chapters.append(
-                {
-                    "index": i,
-                    "name": name,
-                    "text": text,
-                    "length": len(text),
-                    "selected": is_likely_chapter(item.get_name(), text),
-                }
-            )
+    total_count = len(raw_chapters)
+    chapters = []
+    for i, (item, title, text) in enumerate(raw_chapters):
+        selected = is_likely_chapter(
+            title, text, filename=item.get_name(), total_chapters=total_count
+        )
+        chapters.append(
+            {
+                "index": i,
+                "name": title,
+                "text": text,
+                "length": len(text),
+                "selected": selected,
+            }
+        )
 
     return chapters
-
-
-def is_likely_chapter(name, text):
-    """Determine if this is likely a main chapter (for auto-selection)."""
-    name_lower = name.lower()
-    has_min_len = len(text) > 100
-    looks_like_chapter = bool(
-        "chapter" in name_lower
-        or re.search(r"part_?\d{1,3}", name_lower)
-        or re.search(r"ch_?\d{1,3}", name_lower)
-    )
-    return has_min_len and looks_like_chapter
 
 
 def find_cover(book):
@@ -933,8 +1106,12 @@ def generate_audiobook(
         safe_name = "".join(
             c for c in chapter_name if c.isalnum() or c in (" ", "-", "_")
         ).strip()
-        m4a_path = output_path / f"{safe_name}.m4a"
-        mp3_path = output_path / f"{safe_name}.mp3"
+        if not safe_name:
+            safe_name = f"chapter_{i + 1}"
+        m4a_path = output_path / f"{i + 1:02d}_{safe_name}.m4a"
+        mp3_path = output_path / f"{i + 1:02d}_{safe_name}.mp3"
+        legacy_m4a = output_path / f"{safe_name}.m4a"
+        legacy_mp3 = output_path / f"{safe_name}.mp3"
 
         def chapter_progress_callback(p):
             if progress_callback:
@@ -950,12 +1127,18 @@ def generate_audiobook(
         if not text.strip():
             continue
 
-        # Check if already exists (check m4a first, fallback to mp3)
+        # Check if already exists (check m4a first, fallback to mp3, supporting legacy filenames)
         if m4a_path.exists():
             chapter_files.append(m4a_path)
             continue
+        elif legacy_m4a.exists():
+            chapter_files.append(legacy_m4a)
+            continue
         elif mp3_path.exists():
             chapter_files.append(mp3_path)
+            continue
+        elif legacy_mp3.exists():
+            chapter_files.append(legacy_mp3)
             continue
 
         audio = pipeline.generate(text, progress_callback=chapter_progress_callback)
@@ -999,6 +1182,9 @@ def generate_audiobook(
         if progress_callback:
             progress_callback(percent=95, status="Creating M4B audiobook...")
 
+        chapter_titles = [
+            ch.get("name", f"Chapter {idx + 1}") for idx, ch in enumerate(chapters)
+        ]
         m4b_path = create_m4b(
             chapter_files,
             f"{book_title} - {book_author}.epub",
@@ -1006,6 +1192,7 @@ def generate_audiobook(
             output_folder,
             title=book_title,
             author=book_author,
+            chapter_titles=chapter_titles,
         )
 
         if progress_callback:

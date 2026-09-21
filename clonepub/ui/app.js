@@ -266,7 +266,7 @@ function renderChapters() {
         item.innerHTML = `
             <div class="chapter-checkbox"></div>
             <div class="chapter-info">
-                <div class="chapter-name">${escapeHtml(chapter.name)}</div>
+                <div class="chapter-name" title="${escapeHtml(chapter.name)}">${escapeHtml(chapter.name)}</div>
                 <div class="chapter-length">${chapter.length.toLocaleString()} chars</div>
             </div>
         `;
