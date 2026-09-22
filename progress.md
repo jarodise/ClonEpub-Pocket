@@ -22,3 +22,10 @@
   - Bumped version to `1.2.2` in `pyproject.toml`, `electron/package.json`, and `uv.lock`.
   - Added explicit `app.setName('ClonEpub')` in `electron/src/main.ts`.
   - Built `electron/out/make/ClonEpub.dmg` (170MB). Verified `ClonEpub.app`, ad-hoc codesigning, and bundle ID `com.jarodise.clonepub`.
+- **2026-09-22 19:24**: Release v1.2.3 bundled and verified:
+  - Fixed offline dependency installation error (`en-core-web-sm` DNS / GitHub connect failure).
+  - Bundled `en_core_web_sm-3.8.0-py3-none-any.whl` locally into `wheels/` and added `[tool.uv.sources]` in `pyproject.toml`.
+  - Added `../wheels` to `extraResource` in `electron/forge.config.ts`.
+  - Bumped version to `1.2.3` in `pyproject.toml`, `electron/package.json`, and `uv.lock`.
+  - Built `electron/out/make/ClonEpub.dmg` (182MB). Verified offline `uv sync` from app resources succeeds without network dependency.
+

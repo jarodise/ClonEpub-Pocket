@@ -21,6 +21,7 @@ const config: ForgeConfig = {
             '../pyproject.toml',
             '../uv.lock',
             '../README.md',
+            '../wheels',
             // Bundled uv binary
             './assets/uv'
         ],

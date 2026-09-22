@@ -258,7 +258,7 @@ wheels = [
 
 [[package]]
 name = "clonepub"
-version = "1.2.2"
+version = "1.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "bs4" },
@@ -277,7 +277,7 @@ dependencies = [
 requires-dist = [
     { name = "bs4", specifier = ">=0.0.2" },
     { name = "ebooklib", specifier = ">=0.18" },
-    { name = "en-core-web-sm", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
+    { name = "en-core-web-sm", path = "wheels/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "flask", specifier = ">=3.1.2" },
     { name = "flask-cors", specifier = ">=6.0.2" },
     { name = "lxml", specifier = ">=5.0.0" },
@@ -390,9 +390,9 @@ wheels = [
 [[package]]
 name = "en-core-web-sm"
 version = "3.8.0"
-source = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+source = { path = "wheels/en_core_web_sm-3.8.0-py3-none-any.whl" }
 wheels = [
-    { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl", hash = "sha256:1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85" },
+    { filename = "en_core_web_sm-3.8.0-py3-none-any.whl", hash = "sha256:1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85" },
 ]
 
 [[package]]
