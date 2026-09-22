@@ -28,4 +28,6 @@
   - Added `../wheels` to `extraResource` in `electron/forge.config.ts`.
   - Bumped version to `1.2.3` in `pyproject.toml`, `electron/package.json`, and `uv.lock`.
   - Built `electron/out/make/ClonEpub.dmg` (182MB). Verified offline `uv sync` from app resources succeeds without network dependency.
-
+- **2026-09-22 22:04**: GitHub Release v1.2.3 published:
+  - Attached `ClonEpub.dmg` (183MB) to release.
+  - Published to https://github.com/jarodise/ClonEpub-Pocket/releases/tag/v1.2.3
