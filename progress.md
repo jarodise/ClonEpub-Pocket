@@ -31,3 +31,12 @@
 - **2026-09-22 22:04**: GitHub Release v1.2.3 published:
   - Attached `ClonEpub.dmg` (183MB) to release.
   - Published to https://github.com/jarodise/ClonEpub-Pocket/releases/tag/v1.2.3
+- **2026-10-04 13:00**: Release v1.2.4 — Fix TTS Attention Glitches & Punctuation Chaining:
+  - Sanitized repeated and spaced em-dashes, hyphens, and underscores (`— — —`, `---`, etc.) in `_clean_text_for_tts` into natural comma pauses to prevent autoregressive attention breakdown and infinite looping in Pocket TTS.
+  - Normalized unicode ellipses and stacked periods (`…`, `....`, `….\n`).
+  - Added standalone ALL-CAPS word normalization to title case for natural pronunciation.
+  - Stripped decorative non-word characters and prevented symbol-only chunks from hitting the TTS model.
+  - Fixed HTML block text extraction in `extract_text_from_soup` to avoid appending periods to blocks ending in `…` or `–`.
+  - Added unit test suite `TestCleanTextForTTS` in `testing/test_tts_pipeline.py`.
+  - Bumped version to `1.2.4` across `pyproject.toml`, `electron/package.json`, and `uv.lock`.
+

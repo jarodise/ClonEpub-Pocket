@@ -364,7 +364,14 @@ class PocketTTSPipeline:
         self.model = get_tts_model(quantize=quantize)
 
     def _clean_text_for_tts(self, text):
-        """Clean text for TTS by removing quotation marks and normalizing ALL CAPS."""
+        """Clean text for TTS by normalizing whitespace, dashes, quotes, and ALL CAPS."""
+        if not text:
+            return ""
+
+        # Normalize unicode whitespace and newlines
+        text = re.sub(r"[\xa0\u200b\u200c\u200d\uFEFF]", " ", text)
+        text = text.replace("\n", " ").replace("\r", " ")
+
         # Normalize smart apostrophes to straight apostrophes first
         text = text.replace("’", "'").replace("‘", "'")
 
@@ -374,14 +381,44 @@ class PocketTTSPipeline:
         for char in quote_chars:
             cleaned = cleaned.replace(char, "")
 
-        # Normalize ALL CAPS text to title case for better pronunciation
-        alpha_chars = [c for c in cleaned if c.isalpha()]
-        if alpha_chars:
-            uppercase_ratio = sum(1 for c in alpha_chars if c.isupper()) / len(
-                alpha_chars
-            )
-            if uppercase_ratio > 0.7:
-                cleaned = cleaned.title()
+        # Normalize ellipses and stacked dots
+        cleaned = cleaned.replace("…", "...")
+        cleaned = re.sub(r"\.{4,}", "...", cleaned)
+        cleaned = re.sub(r"\.{3,}\.+", "...", cleaned)
+
+        # Strip decorative symbols and repeated non-word characters
+        cleaned = re.sub(r"[*#~=•·*]{2,}", " ", cleaned)
+
+        # Collapse repeated or spaced dashes, em-dashes, en-dashes, hyphens, underscores
+        # into a comma pause to prevent TTS attention breakdown / infinite loops
+        cleaned = re.sub(r"(?:[\s]*[—–\-_]+[\s]*){2,}", ", ", cleaned)
+        cleaned = re.sub(r"[-—–_]{2,}", ", ", cleaned)
+
+        # Clean up leading/trailing punctuation and isolated symbols
+        cleaned = re.sub(r"^[,\s—–\-_.]+", "", cleaned)
+        cleaned = re.sub(r"[—–\-_]+$", "", cleaned)
+
+        # Normalize repeated punctuation
+        cleaned = re.sub(r",\s*,+", ", ", cleaned)
+        cleaned = re.sub(r"\s+,", ",", cleaned)
+        cleaned = re.sub(r",\s*\.", ".", cleaned)
+
+        # Drop text if it contains no alphanumeric characters
+        if not any(c.isalnum() for c in cleaned):
+            return ""
+
+        # Normalize standalone ALL CAPS words (>=2 chars) to title case for natural pronunciation
+        common_acronyms = {
+            "AI", "ID", "OK", "TV", "US", "USA", "UK", "UN", "EU", "FBI", "CIA", "NASA", "HTML", "TTS", "EPUB", "M4B", "MP3", "WAV",
+        }
+        cleaned = re.sub(
+            r"\b[A-Z]{2,}\b",
+            lambda m: m.group(0) if m.group(0) in common_acronyms else m.group(0).title(),
+            cleaned,
+        )
+
+        # Collapse excessive whitespace
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
         return cleaned
 
@@ -399,6 +436,8 @@ class PocketTTSPipeline:
     def _generate_single_audio(self, text):
         """Generate audio for a single text segment using Pocket TTS."""
         cleaned_text = self._clean_text_for_tts(text)
+        if not cleaned_text or not any(c.isalnum() for c in cleaned_text):
+            return None
 
         try:
             # Prepare audio prompt — use cached model state if available
@@ -941,7 +980,9 @@ def extract_text_from_soup(soup):
     # Format text into lines with proper sentence-ending punctuation for TTS pacing
     result = []
     for b in blocks:
-        if b and not b.endswith((".", "!", "?", ":", ";", '"', "'", "”", "’", "—")):
+        if b and not b.endswith(
+            (".", "!", "?", ":", ";", '"', "'", "”", "’", "—", "…", "–", "...")
+        ):
             b += "."
         result.append(b)
 

@@ -129,5 +129,42 @@ class TestEnsureCompatibleAudio(unittest.TestCase):
             self.assertEqual(result, "/some/path/my_audio.mp3")
 
 
+class TestCleanTextForTTS(unittest.TestCase):
+    """Test text cleaning for TTS preprocessing."""
+
+    def setUp(self):
+        self.pipeline = core.PocketTTSPipeline(voice_preset=None)
+
+    def test_repeated_dashes_collapsed_to_comma(self):
+        text = "Undergo the formula of — — — — — — --- — — — --- — - —UNDOING --- --- - — - themselves."
+        cleaned = self.pipeline._clean_text_for_tts(text)
+        self.assertNotIn("— — —", cleaned)
+        self.assertNotIn("---", cleaned)
+        self.assertIn("formula of, Undoing, themselves", cleaned)
+
+    def test_leading_and_trailing_dashes_stripped(self):
+        text = "— — — The process I will discuss — —."
+        cleaned = self.pipeline._clean_text_for_tts(text)
+        self.assertTrue(cleaned.startswith("The process"))
+        self.assertFalse(cleaned.endswith("—"))
+
+    def test_ellipses_normalized(self):
+        text = "blue haired old ladies….\nbook buyers, governments…."
+        cleaned = self.pipeline._clean_text_for_tts(text)
+        self.assertNotIn("….", cleaned)
+        self.assertIn("...", cleaned)
+
+    def test_symbol_only_returns_empty(self):
+        text = "---"
+        cleaned = self.pipeline._clean_text_for_tts(text)
+        self.assertEqual(cleaned, "")
+
+    def test_all_caps_normalized(self):
+        text = "THE UNIVERSAL CYCLE OF JOY"
+        cleaned = self.pipeline._clean_text_for_tts(text)
+        self.assertEqual(cleaned, "The Universal Cycle Of Joy")
+
+
 if __name__ == "__main__":
     unittest.main()
+
