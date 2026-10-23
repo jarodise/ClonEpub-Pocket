@@ -6,7 +6,8 @@ Convert EPUB e-books to high-quality audiobooks with voice cloning. A standalone
 
 ## ✨ Features
 
-- 📖 **EPUB to Audiobook** — Load any EPUB file and convert it to a high-quality audiobook
+- 📖 **EPUB to Audiobook** — Load any EPUB file and convert it to a high-quality M4B audiobook with chapter markers
+- 📑 **Smart Chapter Stitching & Manual Editing** — Automatically stitches split multi-file chapters; rename, merge, or delete chapters directly in the UI
 - 🎤 **Voice Cloning** — Clone any voice from a 10-30 second audio sample
 - 🔊 **Built-in Voice Presets** — 26 ready-to-use voices with different styles
 - 💾 **Save Custom Voices** — Save cloned voices as reusable presets for future use
@@ -14,7 +15,7 @@ Convert EPUB e-books to high-quality audiobooks with voice cloning. A standalone
 - ⚡ **Fast Generation** — ~6x real-time speed on Apple Silicon, ~200ms latency for first chunk
 - 🖥️ **Standalone App** — Self-contained Electron app with bundled Python backend
 - 📥 **Auto Model Download** — TTS model downloads automatically on first run
-- 🎯 **Modern UI** — Beautiful dark-themed interface with chapter selection
+- 🎯 **Modern UI** — Beautiful dark-themed interface with live chapter selection counter
 
 ## 🚀 Powered by Pocket TTS
 
@@ -60,7 +61,7 @@ git clone https://github.com/jarodise/ClonEpub-Pocket.git
 cd ClonEpub-Pocket
 
 # Install Python dependencies
-uv sync
+./electron/assets/uv sync
 
 # Build and run Electron app
 cd electron
@@ -82,10 +83,25 @@ This creates a `.dmg` file in `electron/out/make/`.
 ### Basic Workflow
 
 1. **Open EPUB** — Click "Open EPUB" to load your e-book
-2. **Select Chapters** — Use the chapter list to select which chapters to convert
+2. **Review & Edit Chapters** — Inspect, select, rename, or merge chapters as needed
 3. **Choose Voice** — Select a built-in preset, a saved custom voice, or upload a new audio sample
-4. **Preview** — Click "Preview Voice" to hear a sample
+4. **Preview** — Click "Preview" to hear a voice sample
 5. **Generate** — Click "Start Generation" to create your audiobook
+
+### 📑 Chapter Management & Manual Editing (New in v1.3)
+
+EPUB files in the wild can have varied or messy internal structures (e.g., Calibre multi-part split files, abbreviated NCX labels, or unlinked illustrations). ClonEpub handles them automatically while giving you full manual control:
+
+- **Automatic Chapter Stitching**: Contiguous file chunks (e.g. `part0025.xhtml` + `part0026.xhtml`) that belong between Table of Contents entries are automatically concatenated into their parent chapter. No sentences are severed and no orphan tracks appear.
+- **Dual TOC Reconciliation**: Reconciles machine NCX and HTML navigation, resolving full, descriptive chapter names (e.g. `1 - A Parable About a Parable` instead of just `ONE`).
+- **Smart Front/Back Matter Filtering**: Non-narrative pages (Table of Contents, Copyright, Index, Bibliography, Reviews) are clearly identified and unselected by default.
+- **Live Counter**: The header displays `(X of Y selected)` so you always know exactly which chapters will be converted.
+
+#### Manual UI Controls:
+- ✏️ **Inline Chapter Renaming**: Click on the chapter title in the Chapter Preview header to rename any chapter track. The updated name is immediately reflected in the chapter list and saved to the final audio metadata.
+- 🔗 **Merge into Previous**: If an EPUB has an unusual split or orphan illustration, select the chapter and click **"Merge with Previous"** to join its text into the preceding chapter and update the character count.
+- 🗑️ **Remove from List**: Click **"Remove"** to delete unwanted or auxiliary sections completely from the project list.
+- 📝 **Content Editing**: Edit chapter text directly in the preview textarea; changes save automatically on blur.
 
 ### Voice Presets
 
