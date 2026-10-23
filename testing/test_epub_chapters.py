@@ -256,6 +256,44 @@ class TestEPUBChapters(unittest.TestCase):
         if "Index of Names" in chapters_by_name:
             self.assertFalse(chapters_by_name["Index of Names"]["selected"])
 
+    def test_crystal_and_way_of_light_chapter_alignment(self):
+        """Test that EPUBs with page-anchor TOCs do not cause off-by-one chapter title misattributions."""
+        epub_name = "The Crystal and the Way of Light_ Sutra, Tantra, and -- Chogyal Namkhai Norbu & John Shane -- 1986 -- Snow Lion Publications, Incorporated -- isbn13 9781559391351 -- 95a5fb59393eccb8ea23800355be20c7 -- Anna’s Archive.epub"
+        epub_path = Path(__file__).parent.parent / epub_name
+        if not epub_path.exists():
+            self.skipTest(f"EPUB file not found at {epub_path}")
+
+        data = load_epub(str(epub_path))
+        chapters = data["chapters"]
+        chapters_by_name = {c["name"]: c for c in chapters}
+
+        # 1. Front matter Contents should NOT be selected
+        self.assertIn("Contents", chapters_by_name)
+        self.assertFalse(chapters_by_name["Contents"]["selected"])
+
+        # 2. Key narrative chapters must NOT have off-by-one titles:
+        # Chapter 1 must be Chapter 1 (not Chapter 2)
+        ch1_key = [k for k in chapters_by_name if "Chapter One" in k or "My Birth" in k]
+        self.assertTrue(len(ch1_key) > 0, "Chapter One not found in chapters")
+        ch1 = chapters_by_name[ch1_key[0]]
+        self.assertIn("My Birth, Early Life, and Education", ch1["name"])
+        self.assertIn("My Birth, Early Life", ch1["text"])
+        self.assertTrue(ch1["selected"])
+
+        # Chapter 2 must be Chapter 2 (not Chapter 3)
+        ch2_key = [k for k in chapters_by_name if "Chapter Two" in k or "An Introductory Perspective" in k]
+        self.assertTrue(len(ch2_key) > 0, "Chapter Two not found in chapters")
+        ch2 = chapters_by_name[ch2_key[0]]
+        self.assertIn("An Introductory Perspective", ch2["name"])
+        self.assertIn("An Introductory Perspective", ch2["text"])
+        self.assertTrue(ch2["selected"])
+
+        # The Six Vajra Verses must be The Six Vajra Verses (not Chapter 1)
+        self.assertIn("The Six Vajra Verses", chapters_by_name)
+        v_ch = chapters_by_name["The Six Vajra Verses"]
+        self.assertIn("Six Vajra", v_ch["text"])
+        self.assertNotIn("Chapter One", v_ch["text"])
+
     def test_api_chapter_manual_controls(self):
         """Test ClonEpubAPI manual chapter controls (rename, merge with previous, delete)."""
         from clonepub.api import ClonEpubAPI

@@ -864,6 +864,22 @@ EXCLUDED_FILENAMES_PATTERN = re.compile(
 )
 
 
+GENERIC_CHAPTER_TITLE_PATTERN = re.compile(
+    r"^(?:chapter|part|section|ch\.?|appendix)?\s*(?:[0-9]+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|twenty\s*-\s*\w+)?$",
+    re.I,
+)
+
+WORD_TO_NUM = {
+    "1": 1, "one": 1, "2": 2, "two": 2, "3": 3, "three": 3,
+    "4": 4, "four": 4, "5": 5, "five": 5, "6": 6, "six": 6,
+    "7": 7, "seven": 7, "8": 8, "eight": 8, "9": 9, "nine": 9,
+    "10": 10, "ten": 10, "11": 11, "eleven": 11, "12": 12, "twelve": 12,
+    "13": 13, "thirteen": 13, "14": 14, "fourteen": 14, "15": 15, "fifteen": 15,
+    "16": 16, "sixteen": 16, "17": 17, "seventeen": 17, "18": 18, "eighteen": 18,
+    "19": 19, "nineteen": 19, "20": 20, "twenty": 20,
+}
+
+
 def extract_html_toc_map(book):
     """Extract a mapping from HTML Table of Contents or EPUB3 NAV documents."""
     html_toc = {}
@@ -872,15 +888,33 @@ def extract_html_toc_map(book):
             continue
         try:
             raw_content = item.get_content()
-            content_lower = raw_content.lower()
             soup = BeautifulSoup(raw_content, "html.parser")
         except Exception:
             continue
 
         nav = soup.find("nav", attrs={"epub:type": "toc"}) or soup.find("nav", id=re.compile(r"toc", re.I))
         if nav:
-            for a in nav.find_all("a", href=True):
-                href = unquote(a["href"]).split("#")[0].replace("\\", "/").strip()
+            links = nav.find_all("a", href=True)
+        else:
+            heading = soup.find(
+                lambda t: t.name in ["h1", "h2", "h3", "div", "p"]
+                and t.get_text().strip().lower() in ["table of contents", "contents", "toc"]
+            )
+            links = soup.find_all("a", href=True) if heading else []
+
+        if len(links) >= 3:
+            for a in links:
+                raw_href = a["href"].replace("\\", "/").strip()
+                if "#" in raw_href:
+                    file_part, anchor_part = raw_href.split("#", 1)
+                    # Skip print page number markers (e.g. #page0035, #p12, #calibre_pb_10)
+                    # Page anchors placed at page breaks often sit at the end of the previous chapter file.
+                    if re.search(r"^(?:page|p\d|pg\d|calibre_pb)", anchor_part, re.I):
+                        continue
+                    href = unquote(file_part).strip()
+                else:
+                    href = unquote(raw_href).strip()
+
                 text = " ".join(a.get_text().split())
                 if href and text:
                     base = Path(href).name
@@ -888,23 +922,6 @@ def extract_html_toc_map(book):
                         html_toc[base] = text
                     if href not in html_toc:
                         html_toc[href] = text
-        else:
-            heading = soup.find(
-                lambda t: t.name in ["h1", "h2", "h3", "div", "p"]
-                and t.get_text().strip().lower() in ["table of contents", "contents", "toc"]
-            )
-            if heading:
-                links = soup.find_all("a", href=True)
-                if len(links) >= 3:
-                    for a in links:
-                        href = unquote(a["href"]).split("#")[0].replace("\\", "/").strip()
-                        text = " ".join(a.get_text().split())
-                        if href and text:
-                            base = Path(href).name
-                            if base not in html_toc:
-                                html_toc[base] = text
-                            if href not in html_toc:
-                                html_toc[href] = text
     return html_toc
 
 
@@ -939,18 +956,65 @@ def extract_toc_map(book):
         for item in book.toc:
             process_item(item)
 
-    # Supplement with HTML TOC (prefer richer/more descriptive titles)
+    # Supplement with HTML TOC only when consistent (avoiding off-by-one errors from page anchors)
     try:
         html_toc = extract_html_toc_map(book)
         for k, v in html_toc.items():
             if k not in toc_map:
                 toc_map[k] = v
-            elif len(v) > len(toc_map[k]) and v.lower() != toc_map[k].lower():
-                toc_map[k] = v
+            else:
+                existing = toc_map[k].strip().lower()
+                cand = v.strip().lower()
+                # Check for numerical / chapter mismatch
+                e_nums = re.findall(r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b", existing)
+                c_nums = re.findall(r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b", cand)
+                num_conflict = False
+                if e_nums and c_nums:
+                    e_val = WORD_TO_NUM.get(e_nums[0])
+                    c_val = WORD_TO_NUM.get(c_nums[0])
+                    if e_val and c_val and e_val != c_val:
+                        num_conflict = True
+
+                if not num_conflict and len(v) > len(toc_map[k]) and (existing in cand or GENERIC_CHAPTER_TITLE_PATTERN.match(existing)):
+                    toc_map[k] = v
     except Exception:
         pass
 
     return toc_map
+
+
+def enrich_chapter_title(base_title, soup, book_title=""):
+    """Enrich generic chapter titles (e.g. 'Chapter One' or 'ONE') using document headings."""
+    clean_base = base_title.strip() if base_title else ""
+    candidates = []
+
+    for tag in soup.find_all(["h1", "h2", "h3", "h4", "div", "p"]):
+        is_heading_tag = tag.name in ["h1", "h2", "h3", "h4"]
+        cls = " ".join(tag.get("class", []))
+        is_title_class = bool(re.search(r"chaptitle|chapter-title|chapter_title|chaptertitle|heading|class_s2E|class_s2G", cls, re.I))
+
+        if is_heading_tag or is_title_class:
+            t = " ".join(tag.get_text().split())
+            if 1 < len(t) < 140 and t not in candidates:
+                if t.lower() != book_title.lower():
+                    candidates.append(t)
+        if len(candidates) >= 4:
+            break
+
+    if not clean_base:
+        if not candidates:
+            return ""
+        if len(candidates) >= 2 and GENERIC_CHAPTER_TITLE_PATTERN.match(candidates[0]):
+            return f"{candidates[0]}: {candidates[1]}"
+        return candidates[0]
+
+    if GENERIC_CHAPTER_TITLE_PATTERN.match(clean_base):
+        for cand in candidates:
+            if cand.lower() == clean_base.lower() or GENERIC_CHAPTER_TITLE_PATTERN.match(cand):
+                continue
+            return f"{clean_base}: {cand}"
+
+    return clean_base
 
 
 def extract_chapter_title(item, soup, toc_map, book_title=""):
@@ -960,40 +1024,29 @@ def extract_chapter_title(item, soup, toc_map, book_title=""):
 
     # 1. Official Table of Contents
     if item_name in toc_map:
-        return toc_map[item_name]
+        return enrich_chapter_title(toc_map[item_name], soup, book_title)
     if base_name in toc_map:
-        return toc_map[base_name]
+        return enrich_chapter_title(toc_map[base_name], soup, book_title)
 
     # 2. In-document headings (h1, h2, h3)
-    for h in soup.find_all(["h1", "h2", "h3"]):
-        htext = h.get_text().strip()
-        if htext and htext.lower() != book_title.lower() and len(htext) < 120:
-            return htext
+    heading_title = enrich_chapter_title("", soup, book_title)
+    if heading_title:
+        return heading_title
 
-    # 3. Chapter title classes in HTML
-    title_classes = re.compile(
-        r"chaptitle|chapter-title|chapter_title|chaptertitle|heading", re.I
-    )
-    title_elem = soup.find(class_=title_classes)
-    if title_elem:
-        ttext = title_elem.get_text().strip()
-        if ttext and len(ttext) < 120 and ttext.lower() != book_title.lower():
-            return ttext
-
-    # 4. HTML <title> tag in <head>
+    # 3. HTML <title> tag in <head>
     title_tag = soup.find("title")
     if title_tag:
         ttype = title_tag.get_text().strip()
         if ttype and ttype.lower() != book_title.lower() and len(ttype) < 120:
             return ttype
 
-    # 5. Clean filename stem if explicitly named as chapter
+    # 4. Clean filename stem if explicitly named as chapter
     stem = Path(item_name).stem
     m = re.match(r"^(?:ch|chap|chapter)[-_]?(\d+)$", stem, re.I)
     if m:
         return f"Chapter {int(m.group(1))}"
 
-    # 6. First short block element that looks like a title (for styled divs without h1-h3)
+    # 5. First short block element that looks like a title
     for tag in soup.find_all(["div", "p"]):
         t = tag.get_text().strip()
         if t and 3 <= len(t) < 80 and not re.search(r"[\.\?!]$", t) and t.lower() != book_title.lower():
@@ -1121,7 +1174,8 @@ def extract_chapters(book):
             # Starts a new logical chapter explicitly listed in TOC
             if current_chapter:
                 raw_chapters.append(current_chapter)
-            title = toc_map.get(item_name) or toc_map.get(base_name)
+            raw_title = toc_map.get(item_name) or toc_map.get(base_name)
+            title = enrich_chapter_title(raw_title, soup, book_title)
             current_chapter = {
                 "title": title,
                 "texts": [text],
