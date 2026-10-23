@@ -485,10 +485,54 @@ body {
     letter-spacing: 0.5px;
 }
 
-.preview-chapter-name {
-    font-size: 13px;
+.preview-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex: 1;
+    min-width: 0;
+}
+
+.preview-chapter-title-input {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
     color: var(--accent-teal);
+    font-size: 13px;
     font-weight: 500;
+    padding: 4px 8px;
+    flex: 1;
+    min-width: 0;
+    transition: all var(--transition-fast);
+}
+
+.preview-chapter-title-input:not(:disabled):hover {
+    border-color: var(--border-color);
+    background: var(--bg-tertiary);
+}
+
+.preview-chapter-title-input:not(:disabled):focus {
+    border-color: var(--accent-teal);
+    background: var(--bg-secondary);
+    outline: none;
+}
+
+.preview-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-left: var(--space-md);
+}
+
+.btn-outline-danger {
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #f87171;
+}
+
+.btn-outline-danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: #ef4444;
 }
 
 .preview-text {

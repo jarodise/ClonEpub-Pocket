@@ -854,7 +854,7 @@ BLOCK_TAGS = {
 EXCLUDED_TITLES_PATTERN = re.compile(
     r"^(?:cover|title\s*page|halftitle|half-title|copyright|dedication|epigraph|contents|table\s*of\s*contents|"
     r"acknowledgments?|acknowledgements?|notes?|endnotes?|footnotes?|bibliography|index|colophon|"
-    r"also\s*by|praise|about\s*the\s*author)\b",
+    r"also\s*by|praise|about\s*the\s*author|what\s+critics\s+say|books?\s+by)\b",
     re.I,
 )
 
@@ -864,8 +864,52 @@ EXCLUDED_FILENAMES_PATTERN = re.compile(
 )
 
 
+def extract_html_toc_map(book):
+    """Extract a mapping from HTML Table of Contents or EPUB3 NAV documents."""
+    html_toc = {}
+    for item in book.get_items():
+        if item.get_type() != ebooklib.ITEM_DOCUMENT:
+            continue
+        try:
+            raw_content = item.get_content()
+            content_lower = raw_content.lower()
+            soup = BeautifulSoup(raw_content, "html.parser")
+        except Exception:
+            continue
+
+        nav = soup.find("nav", attrs={"epub:type": "toc"}) or soup.find("nav", id=re.compile(r"toc", re.I))
+        if nav:
+            for a in nav.find_all("a", href=True):
+                href = unquote(a["href"]).split("#")[0].replace("\\", "/").strip()
+                text = " ".join(a.get_text().split())
+                if href and text:
+                    base = Path(href).name
+                    if base not in html_toc:
+                        html_toc[base] = text
+                    if href not in html_toc:
+                        html_toc[href] = text
+        else:
+            heading = soup.find(
+                lambda t: t.name in ["h1", "h2", "h3", "div", "p"]
+                and t.get_text().strip().lower() in ["table of contents", "contents", "toc"]
+            )
+            if heading:
+                links = soup.find_all("a", href=True)
+                if len(links) >= 3:
+                    for a in links:
+                        href = unquote(a["href"]).split("#")[0].replace("\\", "/").strip()
+                        text = " ".join(a.get_text().split())
+                        if href and text:
+                            base = Path(href).name
+                            if base not in html_toc:
+                                html_toc[base] = text
+                            if href not in html_toc:
+                                html_toc[href] = text
+    return html_toc
+
+
 def extract_toc_map(book):
-    """Extract a mapping of file hrefs/names to chapter titles from book TOC."""
+    """Extract a mapping of file hrefs/names to chapter titles from book TOC (NCX and HTML NAV)."""
     toc_map = {}
 
     def process_item(item):
@@ -894,6 +938,18 @@ def extract_toc_map(book):
     if book.toc:
         for item in book.toc:
             process_item(item)
+
+    # Supplement with HTML TOC (prefer richer/more descriptive titles)
+    try:
+        html_toc = extract_html_toc_map(book)
+        for k, v in html_toc.items():
+            if k not in toc_map:
+                toc_map[k] = v
+            elif len(v) > len(toc_map[k]) and v.lower() != toc_map[k].lower():
+                toc_map[k] = v
+    except Exception:
+        pass
+
     return toc_map
 
 
@@ -916,12 +972,12 @@ def extract_chapter_title(item, soup, toc_map, book_title=""):
 
     # 3. Chapter title classes in HTML
     title_classes = re.compile(
-        r"chaptitle|chapter-title|chapter_title|chaptertitle", re.I
+        r"chaptitle|chapter-title|chapter_title|chaptertitle|heading", re.I
     )
     title_elem = soup.find(class_=title_classes)
     if title_elem:
         ttext = title_elem.get_text().strip()
-        if ttext and len(ttext) < 120:
+        if ttext and len(ttext) < 120 and ttext.lower() != book_title.lower():
             return ttext
 
     # 4. HTML <title> tag in <head>
@@ -931,14 +987,18 @@ def extract_chapter_title(item, soup, toc_map, book_title=""):
         if ttype and ttype.lower() != book_title.lower() and len(ttype) < 120:
             return ttype
 
-    # 5. Clean filename stem
+    # 5. Clean filename stem if explicitly named as chapter
     stem = Path(item_name).stem
     m = re.match(r"^(?:ch|chap|chapter)[-_]?(\d+)$", stem, re.I)
     if m:
         return f"Chapter {int(m.group(1))}"
-    m = re.match(r"^(?:part)[-_]?(\d+)$", stem, re.I)
-    if m:
-        return f"Part {int(m.group(1))}"
+
+    # 6. First short block element that looks like a title (for styled divs without h1-h3)
+    for tag in soup.find_all(["div", "p"]):
+        t = tag.get_text().strip()
+        if t and 3 <= len(t) < 80 and not re.search(r"[\.\?!]$", t) and t.lower() != book_title.lower():
+            return t
+
     return stem.replace("_", " ").replace("-", " ").title()
 
 
@@ -1040,29 +1100,69 @@ def extract_chapters(book):
             if item.get_type() == ebooklib.ITEM_DOCUMENT
         ]
 
+    # Group continuous spine items into logical chapters using TOC boundaries
     raw_chapters = []
+    current_chapter = None
+
     for item in spine_items:
         xml = item.get_body_content()
         soup = BeautifulSoup(xml, features="lxml")
         text = extract_text_from_soup(soup)
 
         # Only include documents with readable text
-        if len(text) > 50:
+        if len(text.strip()) < 50:
+            continue
+
+        item_name = item.get_name()
+        base_name = Path(item_name).name
+        is_in_toc = (item_name in toc_map) or (base_name in toc_map)
+
+        if is_in_toc:
+            # Starts a new logical chapter explicitly listed in TOC
+            if current_chapter:
+                raw_chapters.append(current_chapter)
+            title = toc_map.get(item_name) or toc_map.get(base_name)
+            current_chapter = {
+                "title": title,
+                "texts": [text],
+                "item": item,
+            }
+        elif current_chapter is not None and not any(
+            h in soup.get_text()[:120].lower()
+            for h in ["index", "bibliography", "colophon", "about the author", "praise", "what critics say"]
+        ):
+            # Continuation of current chapter (multi-part chapter generated by Calibre/InDesign)
+            current_chapter["texts"].append(text)
+        else:
+            # Standalone document (e.g. front-matter before first TOC item, or back-matter)
+            if current_chapter:
+                raw_chapters.append(current_chapter)
+                current_chapter = None
+
             title = extract_chapter_title(item, soup, toc_map, book_title)
-            raw_chapters.append((item, title, text))
+            raw_chapters.append({
+                "title": title,
+                "texts": [text],
+                "item": item,
+            })
+
+    if current_chapter:
+        raw_chapters.append(current_chapter)
 
     total_count = len(raw_chapters)
     chapters = []
-    for i, (item, title, text) in enumerate(raw_chapters):
+    for i, ch in enumerate(raw_chapters):
+        full_text = "\n\n".join(ch["texts"])
+        item = ch["item"]
         selected = is_likely_chapter(
-            title, text, filename=item.get_name(), total_chapters=total_count
+            ch["title"], full_text, filename=item.get_name(), total_chapters=total_count
         )
         chapters.append(
             {
                 "index": i,
-                "name": title,
-                "text": text,
-                "length": len(text),
+                "name": ch["title"],
+                "text": full_text,
+                "length": len(full_text),
                 "selected": selected,
             }
         )

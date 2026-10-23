@@ -53,8 +53,10 @@ const elements = {
     deselectAllBtn: document.getElementById('deselectAllBtn'),
 
     // Chapter Preview
-    previewChapterName: document.getElementById('previewChapterName'),
+    previewChapterTitle: document.getElementById('previewChapterTitle'),
     chapterPreviewText: document.getElementById('chapterPreviewText'),
+    mergeChapterBtn: document.getElementById('mergeChapterBtn'),
+    deleteChapterBtn: document.getElementById('deleteChapterBtn'),
 
     // Settings
     voiceDropdown: document.getElementById('voiceDropdown'),
@@ -132,6 +134,10 @@ const API_ENDPOINTS = {
     'list_voices': { method: 'GET', path: '/api/voices' },
     'save_voice': { method: 'POST', path: '/api/voices/save', mapArgs: (args) => ({ audio_path: args[0], name: args[1] }) },
     'delete_voice': { method: 'DELETE', path: (args) => `/api/voices/${args[0]}` },
+    // Chapter editing
+    'update_chapter_title': { method: 'POST', path: (args) => `/api/chapter/${args[0]}/rename`, mapArgs: (args) => ({ name: args[1] }) },
+    'merge_chapter_with_previous': { method: 'POST', path: (args) => `/api/chapter/${args[0]}/merge` },
+    'delete_chapter': { method: 'POST', path: (args) => `/api/chapter/${args[0]}/delete` },
 };
 
 async function callAPI(method, ...args) {
@@ -255,8 +261,15 @@ async function loadBook(filePath) {
 // Chapters
 // ─────────────────────────────────────────────────────────────────────────
 
+function updateChapterCount() {
+    const total = state.chapters.length;
+    const selected = state.chapters.filter(c => c.selected).length;
+    elements.chapterCount.textContent = `(${selected} of ${total} selected)`;
+}
+
 function renderChapters() {
     elements.chaptersList.innerHTML = '';
+    updateChapterCount();
 
     state.chapters.forEach((chapter) => {
         const item = document.createElement('div');
@@ -304,6 +317,7 @@ async function toggleChapter(index) {
         if (item) {
             item.classList.toggle('selected', result.selected);
         }
+        updateChapterCount();
     }
 }
 
@@ -333,8 +347,72 @@ async function loadChapterPreview(index, name) {
     if (result && result.success) {
         state.selectedPreviewChapter = parseInt(index);
         elements.chapterPreviewText.value = result.text;
-        elements.previewChapterName.textContent = name || result.name;
-        elements.previewAudioBtn.disabled = false;
+        if (elements.previewChapterTitle) {
+            elements.previewChapterTitle.value = name || result.name;
+            elements.previewChapterTitle.disabled = false;
+        }
+        if (elements.mergeChapterBtn) {
+            elements.mergeChapterBtn.classList.toggle('hidden', state.selectedPreviewChapter <= 0);
+        }
+        if (elements.deleteChapterBtn) {
+            elements.deleteChapterBtn.classList.remove('hidden');
+        }
+    }
+}
+
+async function saveChapterTitle() {
+    if (state.selectedPreviewChapter === null) return;
+    const newTitle = elements.previewChapterTitle.value.trim();
+    if (!newTitle) return;
+
+    const chapter = state.chapters.find(c => c.index === state.selectedPreviewChapter);
+    if (chapter && chapter.name === newTitle) return;
+
+    const result = await callAPI('update_chapter_title', state.selectedPreviewChapter, newTitle);
+    if (result && result.success) {
+        if (chapter) {
+            chapter.name = newTitle;
+            renderChapters();
+        }
+    }
+}
+
+async function mergeCurrentChapter() {
+    if (state.selectedPreviewChapter === null || state.selectedPreviewChapter <= 0) return;
+    const currChapter = state.chapters.find(c => c.index === state.selectedPreviewChapter);
+    const prevChapter = state.chapters.find(c => c.index === state.selectedPreviewChapter - 1);
+    const msg = `Merge "${currChapter?.name}" into previous chapter "${prevChapter?.name}"?`;
+    if (!confirm(msg)) return;
+
+    const result = await callAPI('merge_chapter_with_previous', state.selectedPreviewChapter);
+    if (result && result.success) {
+        state.chapters = result.chapters;
+        renderChapters();
+        loadChapterPreview(result.merged_index, state.chapters[result.merged_index]?.name);
+    } else {
+        alert(`Merge failed: ${result?.error || 'Unknown error'}`);
+    }
+}
+
+async function deleteCurrentChapter() {
+    if (state.selectedPreviewChapter === null) return;
+    const currChapter = state.chapters.find(c => c.index === state.selectedPreviewChapter);
+    if (!confirm(`Remove "${currChapter?.name}" from chapter list?`)) return;
+
+    const result = await callAPI('delete_chapter', state.selectedPreviewChapter);
+    if (result && result.success) {
+        state.chapters = result.chapters;
+        state.selectedPreviewChapter = null;
+        elements.chapterPreviewText.value = '';
+        if (elements.previewChapterTitle) {
+            elements.previewChapterTitle.value = '';
+            elements.previewChapterTitle.disabled = true;
+        }
+        if (elements.mergeChapterBtn) elements.mergeChapterBtn.classList.add('hidden');
+        if (elements.deleteChapterBtn) elements.deleteChapterBtn.classList.add('hidden');
+        renderChapters();
+    } else {
+        alert(`Delete failed: ${result?.error || 'Unknown error'}`);
     }
 }
 
@@ -851,6 +929,21 @@ function setupEventListeners() {
 
     // Chapter preview - saved on blur
     elements.chapterPreviewText.addEventListener('blur', saveChapterPreview);
+    if (elements.previewChapterTitle) {
+        elements.previewChapterTitle.addEventListener('blur', saveChapterTitle);
+        elements.previewChapterTitle.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                elements.previewChapterTitle.blur();
+            }
+        });
+    }
+    if (elements.mergeChapterBtn) {
+        elements.mergeChapterBtn.addEventListener('click', mergeCurrentChapter);
+    }
+    if (elements.deleteChapterBtn) {
+        elements.deleteChapterBtn.addEventListener('click', deleteCurrentChapter);
+    }
 
     // Voice dropdown
     elements.voiceDropdownTrigger.addEventListener('click', toggleVoiceDropdown);

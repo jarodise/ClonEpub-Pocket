@@ -212,6 +212,73 @@ class ClonEpubAPI:
                 return {"success": True}
         return {"success": False, "error": "Chapter not found"}
 
+    def update_chapter_title(self, index: int, name: str) -> Dict[str, Any]:
+        """Update title/name of a specific chapter."""
+        name = name.strip()
+        if not name:
+            return {"success": False, "error": "Chapter title cannot be empty"}
+        for chapter in self._chapters:
+            if chapter["index"] == index:
+                chapter["name"] = name
+                return {"success": True, "name": name}
+        return {"success": False, "error": "Chapter not found"}
+
+    def merge_chapter_with_previous(self, index: int) -> Dict[str, Any]:
+        """Merge a chapter into the previous chapter."""
+        if index <= 0 or index >= len(self._chapters):
+            return {"success": False, "error": "Cannot merge the first chapter or invalid index"}
+
+        prev_idx = index - 1
+        prev_ch = self._chapters[prev_idx]
+        curr_ch = self._chapters[index]
+
+        # Append text with spacing
+        prev_ch["text"] = prev_ch["text"].rstrip() + "\n\n" + curr_ch["text"].lstrip()
+        prev_ch["length"] = len(prev_ch["text"])
+
+        # Remove curr_ch
+        self._chapters.pop(index)
+
+        # Re-index
+        for i, ch in enumerate(self._chapters):
+            ch["index"] = i
+
+        return {
+            "success": True,
+            "merged_index": prev_idx,
+            "chapters": [
+                {
+                    "index": c["index"],
+                    "name": c["name"],
+                    "length": c["length"],
+                    "selected": c["selected"],
+                }
+                for c in self._chapters
+            ],
+        }
+
+    def delete_chapter(self, index: int) -> Dict[str, Any]:
+        """Remove a chapter from the list."""
+        if index < 0 or index >= len(self._chapters):
+            return {"success": False, "error": "Invalid chapter index"}
+
+        self._chapters.pop(index)
+        for i, ch in enumerate(self._chapters):
+            ch["index"] = i
+
+        return {
+            "success": True,
+            "chapters": [
+                {
+                    "index": c["index"],
+                    "name": c["name"],
+                    "length": c["length"],
+                    "selected": c["selected"],
+                }
+                for c in self._chapters
+            ],
+        }
+
     def toggle_chapter_selection(self, index: int) -> Dict[str, Any]:
         """Toggle selection state of a chapter."""
         for chapter in self._chapters:

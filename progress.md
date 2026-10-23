@@ -39,4 +39,13 @@
   - Fixed HTML block text extraction in `extract_text_from_soup` to avoid appending periods to blocks ending in `…` or `–`.
   - Added unit test suite `TestCleanTextForTTS` in `testing/test_tts_pipeline.py`.
   - Bumped version to `1.2.4` across `pyproject.toml`, `electron/package.json`, and `uv.lock`.
+- **2026-10-23 15:30**: Release v1.3.0 — Robust EPUB Chapter Stitching, Dual TOC Reconciliation & Manual Chapter Editing:
+  - Universal multi-file chapter stitching in `extract_chapters`: contiguous spine items between TOC entries are automatically concatenated to their parent chapter, eliminating orphan Calibre chunks and broken sentences.
+  - Dual TOC extraction (`extract_html_toc_map` + `extract_toc_map`): parses both machine NCX and HTML NAV / printed Table of Contents, reconciling titles to prefer descriptive chapter names.
+  - Removed Calibre filename regex misidentification (`^(?:part)[-_]?(\d+)$`) that caused internal partition chunks to be labeled "Part X".
+  - Enhanced front/back matter identification and auto-deselection for Table of Contents, Copyright, Index, Bibliography, and Reviews.
+  - Added user manual controls: inline chapter title renaming (`update_chapter_title`), merging chapters with previous (`merge_chapter_with_previous`), and chapter deletion (`delete_chapter`).
+  - Added live `(X of Y selected)` chapter counter in UI header.
+  - Added test suite for chapter stitching and manual chapter controls in `testing/test_epub_chapters.py`.
+  - Bumped version to `1.3.0` across `pyproject.toml`, `electron/package.json`, `clonepub/__init__.py`, and `uv.lock`.
 

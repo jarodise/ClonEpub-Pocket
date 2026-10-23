@@ -95,6 +95,26 @@ def update_chapter(index):
     return jsonify(api.update_chapter_content(index, text))
 
 
+@app.route("/api/chapter/<int:index>/rename", methods=["POST"])
+def rename_chapter(index):
+    """Update title of a specific chapter."""
+    data = request.get_json() or {}
+    name = data.get("name", "")
+    return jsonify(api.update_chapter_title(index, name))
+
+
+@app.route("/api/chapter/<int:index>/merge", methods=["POST"])
+def merge_chapter(index):
+    """Merge a chapter into its previous chapter."""
+    return jsonify(api.merge_chapter_with_previous(index))
+
+
+@app.route("/api/chapter/<int:index>/delete", methods=["POST"])
+def delete_chapter(index):
+    """Delete a chapter from the list."""
+    return jsonify(api.delete_chapter(index))
+
+
 @app.route("/api/chapter/<int:index>/toggle", methods=["POST"])
 def toggle_chapter(index):
     """Toggle selection state of a chapter."""

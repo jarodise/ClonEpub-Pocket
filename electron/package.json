@@ -1,6 +1,6 @@
 {
     "name": "clonepub-pocket",
-    "version": "1.2.4",
+    "version": "1.3.0",
     "description": "Convert EPUB e-books to audiobooks with voice cloning",
     "main": "dist/main.js",
     "author": "jarodise",

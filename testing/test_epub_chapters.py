@@ -220,6 +220,75 @@ class TestEPUBChapters(unittest.TestCase):
         if "Index" in chapters_by_name:
             self.assertFalse(chapters_by_name["Index"]["selected"])
 
+    def test_quantum_psychology_split_chapter_stitching(self):
+        """Test multi-file EPUB stitching and front/back matter exclusion on Quantum Psychology."""
+        epub_path = Path(__file__).parent.parent / "Quantum Psychology How Brain Software Programs You and Your World (Robert Anton Wilson) (z-library.sk, 1lib.sk, z-lib.sk).epub"
+        if not epub_path.exists():
+            self.skipTest(f"EPUB file not found at {epub_path}")
+
+        data = load_epub(str(epub_path))
+        chapters = data["chapters"]
+        chapter_names = [c["name"] for c in chapters]
+
+        # 1. Orphan parts like "Part 7" or "Part 26" should NOT exist (they are stitched into their parents)
+        self.assertNotIn("Part 7", chapter_names)
+        self.assertNotIn("Part 26", chapter_names)
+        self.assertNotIn("Part 41", chapter_names)
+
+        # 2. Key narrative chapters should be present and complete
+        chapters_by_name = {c["name"]: c for c in chapters}
+        self.assertIn("Introduction", chapters_by_name)
+        # Introduction includes both part0006 and part0007 (> 18000 chars)
+        self.assertGreater(chapters_by_name["Introduction"]["length"], 15000)
+        self.assertTrue(chapters_by_name["Introduction"]["selected"])
+
+        # Chapter 13 includes both part0025 and part0026 (> 24000 chars)
+        ch13_title = "13 - E and E-Prime"
+        self.assertIn(ch13_title, chapters_by_name)
+        self.assertGreater(chapters_by_name[ch13_title]["length"], 20000)
+        self.assertTrue(chapters_by_name[ch13_title]["selected"])
+
+        # 3. Front matter and Index should NOT be selected
+        if "TABLE OF CONTENTS" in chapters_by_name:
+            self.assertFalse(chapters_by_name["TABLE OF CONTENTS"]["selected"])
+        if "Index" in chapters_by_name:
+            self.assertFalse(chapters_by_name["Index"]["selected"])
+        if "Index of Names" in chapters_by_name:
+            self.assertFalse(chapters_by_name["Index of Names"]["selected"])
+
+    def test_api_chapter_manual_controls(self):
+        """Test ClonEpubAPI manual chapter controls (rename, merge with previous, delete)."""
+        from clonepub.api import ClonEpubAPI
+
+        api = ClonEpubAPI()
+        api._chapters = [
+            {"index": 0, "name": "Chapter 1", "text": "First chapter content.", "length": 21, "selected": True},
+            {"index": 1, "name": "Chapter 2 Part A", "text": "Beginning of chapter 2.", "length": 23, "selected": True},
+            {"index": 2, "name": "Chapter 2 Part B", "text": "Continuation of chapter 2.", "length": 26, "selected": True},
+            {"index": 3, "name": "Back Matter", "text": "Index notes.", "length": 12, "selected": False},
+        ]
+
+        # 1. Rename
+        rename_res = api.update_chapter_title(1, "Chapter 2: The Awakening")
+        self.assertTrue(rename_res["success"])
+        self.assertEqual(api._chapters[1]["name"], "Chapter 2: The Awakening")
+
+        # 2. Merge with previous (merge index 2 into index 1)
+        merge_res = api.merge_chapter_with_previous(2)
+        self.assertTrue(merge_res["success"])
+        self.assertEqual(len(api._chapters), 3)
+        self.assertEqual(api._chapters[1]["name"], "Chapter 2: The Awakening")
+        self.assertIn("Beginning of chapter 2.\n\nContinuation of chapter 2.", api._chapters[1]["text"])
+        self.assertEqual(api._chapters[2]["name"], "Back Matter")
+        self.assertEqual(api._chapters[2]["index"], 2)
+
+        # 3. Delete chapter (delete index 2)
+        delete_res = api.delete_chapter(2)
+        self.assertTrue(delete_res["success"])
+        self.assertEqual(len(api._chapters), 2)
+        self.assertEqual(api._chapters[0]["name"], "Chapter 1")
+        self.assertEqual(api._chapters[1]["name"], "Chapter 2: The Awakening")
+
 
 if __name__ == "__main__":
     unittest.main()

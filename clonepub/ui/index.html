@@ -158,8 +158,14 @@
                     <!-- Chapter Preview -->
                     <div class="chapter-preview">
                         <div class="preview-header">
-                            <h3>CHAPTER PREVIEW</h3>
-                            <span class="preview-chapter-name" id="previewChapterName">Click a chapter to preview</span>
+                            <div class="preview-header-left">
+                                <h3>CHAPTER PREVIEW</h3>
+                                <input type="text" id="previewChapterTitle" class="preview-chapter-title-input" placeholder="Click a chapter to preview & edit" disabled title="Click to rename chapter" />
+                            </div>
+                            <div class="preview-header-actions" id="previewHeaderActions">
+                                <button class="btn btn-sm btn-secondary hidden" id="mergeChapterBtn" title="Merge this chapter into the previous chapter">🔗 Merge with Previous</button>
+                                <button class="btn btn-sm btn-outline-danger hidden" id="deleteChapterBtn" title="Remove chapter from list">🗑️ Remove</button>
+                            </div>
                         </div>
                         <textarea id="chapterPreviewText" class="preview-text"
                             placeholder="Click on a chapter name in the list to preview its content..."></textarea>

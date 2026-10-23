@@ -42,7 +42,6 @@ clonepub/bin/
 
 # Test outputs
 testing_output/
+/*.epub
 docs/DISTRIBUTION_PLAN.md
-docs/IMPLEMENTATION_PLAN.md
-docs/IMPLEMENTATION_PLAN.md
 docs/IMPLEMENTATION_PLAN.md
